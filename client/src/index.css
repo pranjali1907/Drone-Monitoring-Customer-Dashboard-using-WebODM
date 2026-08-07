@@ -1,0 +1,154 @@
+/* ─── Google Fonts ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ─── CSS Variables ────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --bg-page:     #F1F5F9;
+  --bg-white:    #FFFFFF;
+  --border:      #E2E8F0;
+  --accent:      #6366F1;
+  --accent-dark: #4F46E5;
+  --accent-glow: rgba(99, 102, 241, 0.15);
+  --teal:        #14B8A6;
+  --amber:       #F59E0B;
+  --rose:        #F43F5E;
+  --success:     #10B981;
+  --text-1:      #0F172A;
+  --text-2:      #64748B;
+  --text-3:      #94A3B8;
+}
+
+/* ─── Base Reset ───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-1);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,h2,h3,h4,h5,h6 {
+  font-family: 'Outfit', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────  */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-page); }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ─── Animations ────────────────────────────────────────────  */
+@keyframes float {
+  0%,100% { transform: translateY(0px) rotate(45deg); }
+  50%      { transform: translateY(-5px) rotate(45deg); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+  70%  { box-shadow: 0 0 0 10px rgba(99,102,241,0); }
+  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+}
+
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ─── Utility Classes ───────────────────────────────────────  */
+.fade-in-up   { animation: fadeInUp 0.45s ease both; }
+.slide-in-left { animation: slideInLeft 0.4s ease both; }
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--accent) 0%, #A78BFA 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glass-card {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.9);
+}
+
+/* ─── Stat Card Gradient Borders ────────────────────────────  */
+.kpi-card-indigo  { border-top: 4px solid #6366F1 !important; }
+.kpi-card-teal    { border-top: 4px solid #14B8A6 !important; }
+.kpi-card-amber   { border-top: 4px solid #F59E0B !important; }
+.kpi-card-rose    { border-top: 4px solid #F43F5E !important; }
+
+/* ─── Status Badges ─────────────────────────────────────────  */
+.status-completed  { background: #DCFCE7; color: #166534; }
+.status-processing { background: #EDE9FE; color: #5B21B6; }
+.status-pending    { background: #FEF3C7; color: #92400E; }
+.status-failed     { background: #FEE2E2; color: #991B1B; }
+
+/* ─── Leaflet Map Overrides ─────────────────────────────────  */
+.leaflet-container {
+  font-family: 'Inter', sans-serif;
+  border-radius: 16px;
+}
+.leaflet-bar {
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 4px 12px rgba(15,23,42,0.1) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+.leaflet-bar a {
+  background-color: #FFFFFF !important;
+  color: var(--text-1) !important;
+  border-bottom: 1px solid var(--border) !important;
+  transition: all 0.2s ease;
+}
+.leaflet-bar a:hover {
+  background-color: #F8FAFC !important;
+  color: var(--accent) !important;
+}
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background-color: #FFFFFF !important;
+  color: var(--text-1) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.12) !important;
+}
+
+/* ─── Page Transitions ──────────────────────────────────────  */
+.page-enter {
+  animation: fadeInUp 0.35s ease both;
+}
+
+/* ─── Custom MUI Overrides ──────────────────────────────────  */
+.MuiTableContainer-root {
+  border-radius: 14px !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}

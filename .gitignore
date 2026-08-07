@@ -1,0 +1,48 @@
+# Dependency directories
+node_modules/
+client/node_modules/
+client/dist/
+
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+server/__pycache__/
+server/routers/__pycache__/
+
+# Local SQLite databases
+*.db
+*.sqlite3
+
+# Uploads and processed photogrammetry assets (must not be committed to Git)
+uploads/project_*
+processed/project_*
+reports/project_*
+server/uploads/project_*
+server/processed/project_*
+server/reports/project_*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Environments
+.env
+.env.*
+server/.env
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Agent workspace directories
+.gemini/
+.agents/
+.system_generated/
