@@ -80,7 +80,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
     const height = mountRef.current.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#0F1A14'); // Deep forest dark background
+    scene.background = new THREE.Color('#F8FFF9'); // Light mint — clear point cloud visibility
 
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     camera.position.set(0, 15, 25);
@@ -241,11 +241,12 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
   }, [renderMode, rotationSpeed, loadedGeometry]);
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 280px)', minHeight: 480, overflow: 'hidden', borderRadius: 3, border: '1px solid #D1FAE5' }}>
+    <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 280px)', minHeight: 480, overflow: 'hidden', borderRadius: 3, border: '1px solid #A7F3D0', bgcolor: '#F8FFF9' }}>
+      {/* Loading overlay */}
       {/* Loading overlay */}
       {serverLoading && (
         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(15,26,20,0.85)', zIndex: 20, borderRadius: 3 }}>
-          <Typography sx={{ color: '#34D399', fontFamily: 'Outfit', fontWeight: 700, fontSize: '1rem' }}>
+          <Typography sx={{ color: '#10B981', fontFamily: 'Outfit', fontWeight: 700, fontSize: '1rem' }}>
             ⟳ Loading point cloud from server…
           </Typography>
         </Box>
@@ -256,31 +257,32 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
 
       {/* Floating Control Panel */}
       <Paper
-        elevation={4}
+        elevation={3}
         sx={{
           position: 'absolute', top: 20, right: 20,
           p: 2.5,
           display: 'flex', flexDirection: 'column', gap: 2.2,
           zIndex: 10, width: 270, borderRadius: '14px',
-          bgcolor: 'rgba(15,26,20,0.88)',
-          border: '1px solid rgba(16,185,129,0.25)',
-          backdropFilter: 'blur(10px)',
+          bgcolor: 'rgba(255,255,255,0.92)',
+          border: '1px solid #D1FAE5',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 4px 24px rgba(16,185,129,0.12)',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle2" sx={{ fontFamily: 'Outfit', fontWeight: 800, color: '#ECFDF5', flexGrow: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontFamily: 'Outfit', fontWeight: 800, color: '#0F172A', flexGrow: 1 }}>
             3D Point Cloud Panel
           </Typography>
           {serverLoaded && (
             <Chip icon={<CloudDownloadRoundedIcon />} label="Server" size="small"
-              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, bgcolor: 'rgba(16,185,129,0.2)', color: '#34D399', '& .MuiChip-icon': { color: '#34D399', fontSize: 12 } }}
+              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, bgcolor: 'rgba(16,185,129,0.12)', color: '#059669', '& .MuiChip-icon': { color: '#059669', fontSize: 12 } }}
             />
           )}
         </Box>
 
         {/* Local .PLY Upload */}
         <Box>
-          <Typography variant="caption" sx={{ color: '#6EE7B7', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Upload Local .PLY
           </Typography>
           <Button
@@ -290,8 +292,8 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
             startIcon={<CloudUploadIcon />}
             sx={{
               borderRadius: '10px', textTransform: 'none',
-              borderColor: 'rgba(16,185,129,0.3)', color: '#6EE7B7', fontSize: '0.82rem',
-              '&:hover': { borderColor: '#10B981', bgcolor: 'rgba(16,185,129,0.1)' },
+              borderColor: '#A7F3D0', color: '#059669', fontSize: '0.82rem',
+              '&:hover': { borderColor: '#10B981', bgcolor: 'rgba(16,185,129,0.06)' },
             }}
           >
             Choose .PLY File
@@ -306,14 +308,14 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
 
         {/* Render Mode Toggle */}
         <Box>
-          <Typography variant="caption" sx={{ color: '#6EE7B7', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Representation
           </Typography>
           <ToggleButtonGroup
             value={renderMode} exclusive
             onChange={(_, val) => val && setRenderMode(val)}
             size="small" fullWidth
-            sx={{ '& .MuiToggleButton-root': { borderRadius: '8px', py: 0.8, color: '#6EE7B7', borderColor: 'rgba(16,185,129,0.3)', '&.Mui-selected': { bgcolor: 'rgba(16,185,129,0.25)', color: '#34D399' } } }}
+            sx={{ '& .MuiToggleButton-root': { borderRadius: '8px', py: 0.8, color: '#475569', borderColor: '#D1FAE5', '&.Mui-selected': { bgcolor: 'rgba(16,185,129,0.15)', color: '#059669', borderColor: '#10B981' } } }}
           >
             <ToggleButton value="points">
               <Grid3x3Icon fontSize="small" sx={{ mr: 0.5 }} /> Points
@@ -327,10 +329,10 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
         {/* Rotation Speed */}
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-            <Typography variant="caption" sx={{ color: '#6EE7B7', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Rotation Speed
             </Typography>
-            <Typography variant="caption" sx={{ color: '#10B981', fontWeight: 700 }}>
+            <Typography variant="caption" sx={{ color: '#059669', fontWeight: 700 }}>
               {rotationSpeed.toFixed(1)}x
             </Typography>
           </Box>

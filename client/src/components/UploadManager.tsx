@@ -10,14 +10,17 @@ import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
+import DeleteForeverRoundedIcon from '@mui/icons-material/DeleteForeverRounded';
 
 interface UploadManagerProps {
   projectId: number;
   onUploadSuccess: () => void;
   currentStatus: string;
+  /** Path of already-saved PLY on server, if any */
+  existingPlyPath?: string;
 }
 
-export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess, currentStatus }) => {
+export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess, currentStatus, existingPlyPath }) => {
   // ── Image upload state ──────────────────────────────────────────────────
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -137,6 +140,18 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
       setPlyMessage({ type: 'error', text: err.response?.data?.detail || 'PLY upload failed.' });
     } finally {
       setPlyUploading(false);
+    }
+  };
+
+  const handleDeletePly = async () => {
+    setPlyMessage(null);
+    try {
+      await axios.delete(`/api/uploads/project/${projectId}/ply`);
+      setPlyMessage({ type: 'success', text: 'Point cloud deleted. 3D Model tab will lock until a new .ply is uploaded.' });
+      setPlyFile(null);
+      onUploadSuccess(); // Refresh project state
+    } catch (err: any) {
+      setPlyMessage({ type: 'error', text: err.response?.data?.detail || 'Delete failed.' });
     }
   };
 
@@ -303,6 +318,41 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
           </Box>
         )}
 
+        {/* ── Existing PLY Banner + Delete ─────────────────────── */}
+        {existingPlyPath && !plyFile && !plyUploading && (
+          <Box sx={{
+            mt: 2.5, p: 2, borderRadius: '10px',
+            border: '1px solid rgba(16,185,129,0.25)',
+            bgcolor: '#F0FDF4',
+            display: 'flex', alignItems: 'center', gap: 1.5,
+          }}>
+            <ViewInArRoundedIcon sx={{ color: '#10B981', flexShrink: 0 }} />
+            <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+              <Typography sx={{ fontWeight: 700, color: '#065F46', fontSize: '0.88rem' }}>
+                Point cloud saved on server
+              </Typography>
+              <Typography sx={{ fontSize: '0.76rem', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                point_cloud.ply
+              </Typography>
+            </Box>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<DeleteForeverRoundedIcon />}
+              onClick={handleDeletePly}
+              sx={{
+                borderRadius: '8px', flexShrink: 0,
+                borderColor: '#FCA5A5', color: '#EF4444',
+                '&:hover': { bgcolor: '#FEE2E2', borderColor: '#EF4444' },
+                fontSize: '0.78rem', whiteSpace: 'nowrap',
+              }}
+            >
+              Delete PLY
+            </Button>
+          </Box>
+        )}
+
+        {/* ── Upload button when new file selected ─────────────── */}
         {plyFile && !plyUploading && (
           <Button
             variant="contained"

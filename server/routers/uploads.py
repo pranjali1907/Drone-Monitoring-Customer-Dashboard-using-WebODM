@@ -243,3 +243,49 @@ def upload_point_cloud(
     db.commit()
 
     return {"message": "Point cloud uploaded successfully", "point_cloud_path": static_path}
+
+@router.delete("/project/{project_id}/ply")
+def delete_point_cloud(
+    project_id: int,
+    current_admin: models.User = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete the saved .ply point cloud file for a project and clear its database record."""
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    orthophoto = (
+        db.query(models.Orthophoto)
+        .filter(models.Orthophoto.project_id == project_id)
+        .first()
+    )
+
+    # Delete file from disk if it exists
+    ply_path = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}", "point_cloud.ply")
+    if os.path.exists(ply_path):
+        os.remove(ply_path)
+
+    # Clear the DB path
+    if orthophoto:
+        orthophoto.point_cloud_path = None
+        # If no other outputs exist, revert status to pending
+        has_other_outputs = any([
+            orthophoto.orthophoto_path,
+            orthophoto.dsm_path,
+            orthophoto.model_3d_path,
+        ])
+        if not has_other_outputs:
+            project.status = "pending"
+        db.commit()
+
+    # Log action
+    log = models.ActivityLog(
+        user_id=current_admin.id,
+        action="DELETE_PLY",
+        details=f"Deleted point cloud .ply for project ID {project_id}",
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": "Point cloud deleted successfully"}

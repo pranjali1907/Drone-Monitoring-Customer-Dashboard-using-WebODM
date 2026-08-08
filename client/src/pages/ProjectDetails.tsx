@@ -556,6 +556,7 @@ export const ProjectDetails: React.FC = () => {
             projectId={project.id}
             onUploadSuccess={fetchProjectDetails}
             currentStatus={project.status}
+            existingPlyPath={serverPlyPath}
           />
         </TabPanel>
       )}
