@@ -21,7 +21,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Base API URL connection
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_URL = import.meta.env.VITE_API_URL || '';
 axios.defaults.baseURL = API_URL;
 
 // Helper to decode JWT payload without library dependency
