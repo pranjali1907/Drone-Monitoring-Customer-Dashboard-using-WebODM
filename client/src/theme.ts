@@ -1,51 +1,53 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
-const indigo = '#6366F1';
-const indigoDark = '#4F46E5';
-const indigoLight = '#818CF8';
-const teal = '#14B8A6';
-const amber = '#F59E0B';
-const rose = '#F43F5E';
+// ── Emerald & Amber Drone Survey Palette ─────────────────────────────────
+const emerald      = '#10B981';
+const emeraldDark  = '#059669';
+const emeraldLight = '#34D399';
+const amber        = '#F59E0B';
+const amberDark    = '#D97706';
+const amberLight   = '#FCD34D';
+const coral        = '#F43F5E';
 
 export const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: indigo,
-      light: indigoLight,
-      dark: indigoDark,
+      main: emerald,
+      light: emeraldLight,
+      dark: emeraldDark,
       contrastText: '#ffffff',
     },
     secondary: {
-      main: teal,
-      light: '#2DD4BF',
-      dark: '#0D9488',
-      contrastText: '#ffffff',
+      main: amber,
+      light: amberLight,
+      dark: amberDark,
+      contrastText: '#1C1917',
     },
     warning: {
       main: amber,
-      light: '#FCD34D',
-      dark: '#D97706',
+      light: amberLight,
+      dark: amberDark,
     },
     error: {
-      main: rose,
+      main: coral,
       light: '#FB7185',
       dark: '#E11D48',
     },
     success: {
-      main: '#10B981',
-      light: '#34D399',
-      dark: '#059669',
+      main: emerald,
+      light: emeraldLight,
+      dark: emeraldDark,
     },
     background: {
-      default: '#F1F5F9',
+      default: '#F0FDF4',
       paper: '#FFFFFF',
     },
     text: {
       primary: '#0F172A',
-      secondary: '#64748B',
+      secondary: '#475569',
     },
-    divider: '#E2E8F0',
+    divider: '#D1FAE5',
   },
   typography: {
     fontFamily: '"Inter", "Helvetica", "Arial", sans-serif',
@@ -62,7 +64,7 @@ export const theme = createTheme({
       letterSpacing: '0.01em',
     },
     subtitle1: { fontWeight: 600 },
-    subtitle2: { fontWeight: 600, color: '#64748B' },
+    subtitle2: { fontWeight: 600, color: '#475569' },
   },
   shape: { borderRadius: 14 },
   shadows: [
@@ -95,20 +97,20 @@ export const theme = createTheme({
   components: {
     MuiCssBaseline: {
       styleOverrides: {
-        body: { backgroundColor: '#F1F5F9' },
+        body: { backgroundColor: '#F0FDF4' },
       },
     },
     MuiCard: {
       styleOverrides: {
         root: {
           backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
-          boxShadow: '0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)',
+          border: '1px solid #D1FAE5',
+          boxShadow: '0 1px 3px rgba(16,185,129,0.07), 0 1px 2px rgba(15,23,42,0.04)',
           transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
           '&:hover': {
             transform: 'translateY(-3px)',
-            boxShadow: `0 12px 32px ${alpha(indigo, 0.12)}`,
-            borderColor: alpha(indigo, 0.25),
+            boxShadow: `0 12px 32px ${alpha(emerald, 0.14)}`,
+            borderColor: alpha(emerald, 0.3),
           },
         },
       },
@@ -121,30 +123,31 @@ export const theme = createTheme({
           transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
         },
         containedPrimary: {
-          background: `linear-gradient(135deg, ${indigo} 0%, ${indigoDark} 100%)`,
-          boxShadow: `0 4px 14px ${alpha(indigo, 0.35)}`,
+          background: `linear-gradient(135deg, ${emerald} 0%, ${emeraldDark} 100%)`,
+          boxShadow: `0 4px 14px ${alpha(emerald, 0.38)}`,
           '&:hover': {
-            background: `linear-gradient(135deg, ${indigoLight} 0%, ${indigo} 100%)`,
-            boxShadow: `0 6px 20px ${alpha(indigo, 0.45)}`,
+            background: `linear-gradient(135deg, ${emeraldLight} 0%, ${emerald} 100%)`,
+            boxShadow: `0 6px 20px ${alpha(emerald, 0.48)}`,
           },
         },
         containedSecondary: {
-          background: `linear-gradient(135deg, ${teal} 0%, #0D9488 100%)`,
-          boxShadow: `0 4px 14px ${alpha(teal, 0.35)}`,
+          background: `linear-gradient(135deg, ${amber} 0%, ${amberDark} 100%)`,
+          boxShadow: `0 4px 14px ${alpha(amber, 0.35)}`,
+          color: '#1C1917',
           '&:hover': {
-            background: `linear-gradient(135deg, #2DD4BF 0%, ${teal} 100%)`,
-            boxShadow: `0 6px 20px ${alpha(teal, 0.45)}`,
+            background: `linear-gradient(135deg, ${amberLight} 0%, ${amber} 100%)`,
+            boxShadow: `0 6px 20px ${alpha(amber, 0.45)}`,
           },
         },
         outlined: {
-          borderColor: '#CBD5E1',
+          borderColor: '#A7F3D0',
           '&:hover': {
-            backgroundColor: alpha(indigo, 0.04),
-            borderColor: indigo,
+            backgroundColor: alpha(emerald, 0.05),
+            borderColor: emerald,
           },
         },
         text: {
-          '&:hover': { backgroundColor: alpha(indigo, 0.06) },
+          '&:hover': { backgroundColor: alpha(emerald, 0.06) },
         },
       },
     },
@@ -152,19 +155,19 @@ export const theme = createTheme({
       styleOverrides: {
         paper: {
           backgroundColor: '#FFFFFF',
-          borderRight: '1px solid #E2E8F0',
-          boxShadow: '2px 0 8px rgba(15,23,42,0.05)',
+          borderRight: '1px solid #D1FAE5',
+          boxShadow: '2px 0 8px rgba(16,185,129,0.08)',
         },
       },
     },
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: 'rgba(255,255,255,0.85)',
+          backgroundColor: 'rgba(255,255,255,0.88)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
-          borderBottom: '1px solid #E2E8F0',
-          boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
+          borderBottom: '1px solid #D1FAE5',
+          boxShadow: '0 1px 4px rgba(16,185,129,0.08)',
           color: '#0F172A',
         },
       },
@@ -178,13 +181,13 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiTableCell-root': {
-            backgroundColor: '#F8FAFC',
+            backgroundColor: '#F0FDF4',
             fontWeight: 700,
             color: '#475569',
             fontSize: '0.78rem',
             textTransform: 'uppercase',
             letterSpacing: '0.06em',
-            borderBottom: '2px solid #E2E8F0',
+            borderBottom: `2px solid #D1FAE5`,
           },
         },
       },
@@ -192,7 +195,7 @@ export const theme = createTheme({
     MuiTableRow: {
       styleOverrides: {
         root: {
-          '&:hover': { backgroundColor: '#F8FAFC' },
+          '&:hover': { backgroundColor: '#F0FDF4' },
           '&:last-child td': { borderBottom: 'none' },
         },
       },
@@ -200,11 +203,11 @@ export const theme = createTheme({
     MuiLinearProgress: {
       styleOverrides: {
         root: {
-          backgroundColor: alpha(indigo, 0.1),
+          backgroundColor: alpha(emerald, 0.12),
           borderRadius: 6,
         },
         bar: {
-          background: `linear-gradient(90deg, ${indigo}, ${indigoLight})`,
+          background: `linear-gradient(90deg, ${emerald}, ${emeraldLight})`,
           borderRadius: 6,
         },
       },

@@ -69,29 +69,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // If no token or expired, perform auto-login as admin
-      try {
-        const params = new URLSearchParams();
-        params.append('username', 'admin@dronemonitor.com');
-        params.append('password', 'admin123');
-        const res = await axios.post('/api/auth/login', params, {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        });
-        axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.access_token}`;
-        localStorage.setItem('token', res.data.access_token);
-        const decoded = parseJwt(res.data.access_token);
-        setUser({
-          email: decoded.sub,
-          role: decoded.role,
-        });
-        setToken(res.data.access_token);
-      } catch (e) {
-        console.error("Auto login failed", e);
-        delete axios.defaults.headers.common['Authorization'];
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
+      // No valid token — clear auth state and let ProtectedRoute redirect to /login
+      delete axios.defaults.headers.common['Authorization'];
+      setUser(null);
+      setLoading(false);
     };
 
     initializeAuth();

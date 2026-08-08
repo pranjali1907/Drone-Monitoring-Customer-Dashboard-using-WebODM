@@ -182,3 +182,64 @@ def upload_project_report(
     db.commit()
 
     return new_report
+
+@router.post("/project/{project_id}/ply")
+def upload_point_cloud(
+    project_id: int,
+    file: UploadFile = File(...),
+    current_admin: models.User = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Upload a .ply point cloud file and associate it with the project's Orthophoto record."""
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext != ".ply":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .ply files are supported for point cloud uploads.",
+        )
+
+    # Save to processed/project_<id>/point_cloud.ply
+    project_processed_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
+    os.makedirs(project_processed_dir, exist_ok=True)
+
+    dest_path = os.path.join(project_processed_dir, "point_cloud.ply")
+    with open(dest_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Static URL used by frontend
+    static_path = f"static/processed/project_{project_id}/point_cloud.ply"
+
+    # Upsert Orthophoto record
+    orthophoto = (
+        db.query(models.Orthophoto)
+        .filter(models.Orthophoto.project_id == project_id)
+        .first()
+    )
+    if orthophoto:
+        orthophoto.point_cloud_path = static_path
+    else:
+        orthophoto = models.Orthophoto(
+            project_id=project_id,
+            point_cloud_path=static_path,
+        )
+        db.add(orthophoto)
+
+    # Mark project as completed so the 3D Model tab unlocks
+    project.status = "completed"
+    db.commit()
+    db.refresh(orthophoto)
+
+    # Log action
+    log = models.ActivityLog(
+        user_id=current_admin.id,
+        action="UPLOAD_PLY",
+        details=f"Uploaded point cloud .ply for project ID {project_id}",
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": "Point cloud uploaded successfully", "point_cloud_path": static_path}

@@ -4,18 +4,18 @@
 /* ─── CSS Variables ────────────────────────────────────────── */
 :root {
   color-scheme: light;
-  --bg-page:     #F1F5F9;
+  --bg-page:     #F0FDF4;
   --bg-white:    #FFFFFF;
-  --border:      #E2E8F0;
-  --accent:      #6366F1;
-  --accent-dark: #4F46E5;
-  --accent-glow: rgba(99, 102, 241, 0.15);
-  --teal:        #14B8A6;
+  --border:      #D1FAE5;
+  --accent:      #10B981;
+  --accent-dark: #059669;
+  --accent-glow: rgba(16, 185, 129, 0.15);
   --amber:       #F59E0B;
+  --amber-dark:  #D97706;
   --rose:        #F43F5E;
   --success:     #10B981;
   --text-1:      #0F172A;
-  --text-2:      #64748B;
+  --text-2:      #475569;
   --text-3:      #94A3B8;
 }
 
@@ -42,7 +42,7 @@ h1,h2,h3,h4,h5,h6 {
 /* ─── Scrollbar ─────────────────────────────────────────────  */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-page); }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 6px; }
+::-webkit-scrollbar-thumb { background: #A7F3D0; border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 /* ─── Animations ────────────────────────────────────────────  */
@@ -72,9 +72,9 @@ h1,h2,h3,h4,h5,h6 {
 }
 
 @keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
-  70%  { box-shadow: 0 0 0 10px rgba(99,102,241,0); }
-  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.45); }
+  70%  { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
 }
 
 @keyframes gradient-shift {
@@ -88,29 +88,32 @@ h1,h2,h3,h4,h5,h6 {
 .slide-in-left { animation: slideInLeft 0.4s ease both; }
 
 .gradient-text {
-  background: linear-gradient(135deg, var(--accent) 0%, #A78BFA 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--amber) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .glass-card {
-  background: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.9);
+  border: 1px solid rgba(209,250,229,0.8);
 }
 
 /* ─── Stat Card Gradient Borders ────────────────────────────  */
-.kpi-card-indigo  { border-top: 4px solid #6366F1 !important; }
-.kpi-card-teal    { border-top: 4px solid #14B8A6 !important; }
+.kpi-card-emerald { border-top: 4px solid #10B981 !important; }
 .kpi-card-amber   { border-top: 4px solid #F59E0B !important; }
+.kpi-card-teal    { border-top: 4px solid #14B8A6 !important; }
 .kpi-card-rose    { border-top: 4px solid #F43F5E !important; }
+
+/* ─── Legacy aliases (backward compat) ──────────────────────  */
+.kpi-card-indigo  { border-top: 4px solid #10B981 !important; }
 
 /* ─── Status Badges ─────────────────────────────────────────  */
 .status-completed  { background: #DCFCE7; color: #166534; }
-.status-processing { background: #EDE9FE; color: #5B21B6; }
-.status-pending    { background: #FEF3C7; color: #92400E; }
+.status-processing { background: #FEF3C7; color: #92400E; }
+.status-pending    { background: #ECFDF5; color: #065F46; }
 .status-failed     { background: #FEE2E2; color: #991B1B; }
 
 /* ─── Leaflet Map Overrides ─────────────────────────────────  */
@@ -131,14 +134,14 @@ h1,h2,h3,h4,h5,h6 {
   transition: all 0.2s ease;
 }
 .leaflet-bar a:hover {
-  background-color: #F8FAFC !important;
+  background-color: #F0FDF4 !important;
   color: var(--accent) !important;
 }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip {
   background-color: #FFFFFF !important;
   color: var(--text-1) !important;
   border: 1px solid var(--border) !important;
-  box-shadow: 0 8px 24px rgba(15,23,42,0.12) !important;
+  box-shadow: 0 8px 24px rgba(16,185,129,0.12) !important;
 }
 
 /* ─── Page Transitions ──────────────────────────────────────  */

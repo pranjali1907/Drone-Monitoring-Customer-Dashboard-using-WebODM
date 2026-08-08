@@ -162,6 +162,7 @@ class ProjectDetailResponse(ProjectResponse):
     orthophotos: List[OrthophotoResponse] = []
     reports: List[ReportResponse] = []
     measurements: List[MeasurementResponse] = []
+    assigned_clients: List[UserResponse] = []
 
     class Config:
         from_attributes = True

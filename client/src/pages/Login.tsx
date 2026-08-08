@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Button, TextField, Typography, Card, CardContent, Alert, InputAdornment, Stack } from '@mui/material';
+import { Box, Button, TextField, Typography, Card, CardContent, Alert, InputAdornment, Stack, Divider } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -7,13 +7,15 @@ import axios from 'axios';
 import EmailIcon from '@mui/icons-material/Email';
 import LockIcon from '@mui/icons-material/Lock';
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import PersonIcon from '@mui/icons-material/Person';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -36,7 +38,7 @@ export const Login: React.FC = () => {
       login(res.data.access_token);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Authentication failed. Please check credentials.');
+      setError(err.response?.data?.detail || 'Authentication failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -59,45 +61,74 @@ export const Login: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(circle at 10% 20%, rgba(10, 14, 23, 1) 0%, rgba(17, 24, 39, 1) 90%)',
+        background: 'radial-gradient(ellipse at 20% 10%, #0F2B1A 0%, #0A1A10 55%, #031208 100%)',
         p: 2,
         position: 'relative',
         overflow: 'hidden',
       }}
     >
-      {/* Dynamic Background visual glows */}
-      <Box sx={{ position: 'absolute', width: 400, height: 400, bgcolor: 'rgba(59,130,246,0.06)', borderRadius: '50%', filter: 'blur(80px)', top: '-10%', left: '-10%' }} />
-      <Box sx={{ position: 'absolute', width: 450, height: 450, bgcolor: 'rgba(16,185,129,0.04)', borderRadius: '50%', filter: 'blur(90px)', bottom: '-15%', right: '-10%' }} />
+      {/* Ambient green light orbs */}
+      <Box sx={{ position: 'absolute', width: 500, height: 500, bgcolor: 'rgba(16,185,129,0.07)', borderRadius: '50%', filter: 'blur(90px)', top: '-15%', left: '-15%', pointerEvents: 'none' }} />
+      <Box sx={{ position: 'absolute', width: 400, height: 400, bgcolor: 'rgba(245,158,11,0.05)', borderRadius: '50%', filter: 'blur(80px)', bottom: '-20%', right: '-10%', pointerEvents: 'none' }} />
+      <Box sx={{ position: 'absolute', width: 300, height: 300, bgcolor: 'rgba(16,185,129,0.05)', borderRadius: '50%', filter: 'blur(70px)', top: '40%', right: '20%', pointerEvents: 'none' }} />
 
-      <Card sx={{ width: '100%', maxWidth: 450, zIndex: 10, borderRadius: 4 }}>
+      {/* Subtle grid overlay */}
+      <Box sx={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: 'linear-gradient(rgba(16,185,129,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.04) 1px, transparent 1px)',
+        backgroundSize: '60px 60px',
+      }} />
+
+      <Card sx={{
+        width: '100%', maxWidth: 460, zIndex: 10,
+        borderRadius: '20px',
+        background: 'rgba(255,255,255,0.03)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: '1px solid rgba(16,185,129,0.2)',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.1) inset',
+      }}>
         <CardContent sx={{ p: 4.5 }}>
           {/* Logo Header */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4.5 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
             <Box
               sx={{
-                width: 50,
-                height: 50,
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
+                width: 56,
+                height: 56,
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                boxShadow: '0 0 28px rgba(16, 185, 129, 0.5)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                mb: 2,
+                mb: 2.5,
                 animation: 'float 4s ease-in-out infinite'
               }}
             >
-              <FlightTakeoffIcon sx={{ fontSize: 28, color: 'white', transform: 'rotate(45deg)' }} />
+              <FlightTakeoffIcon sx={{ fontSize: 30, color: 'white', transform: 'rotate(45deg)' }} />
             </Box>
-            <Typography variant="h4" sx={{ fontFamily: 'Outfit', fontWeight: 800, textAlign: 'center' }}>
-              SKYE<span style={{ color: '#3b82f6' }}>VIEW</span>
+            <Typography variant="h4" sx={{
+              fontFamily: 'Outfit', fontWeight: 800, textAlign: 'center',
+              color: '#FFFFFF', letterSpacing: '-0.02em',
+            }}>
+              SKYE<span style={{ color: '#10B981' }}>VIEW</span>
             </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1, textAlign: 'center' }}>
-              Drone Photogrammetry & Monitoring Dashboard
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.45)', mt: 0.8, textAlign: 'center', fontSize: '0.85rem' }}>
+              Drone Photogrammetry & Monitoring Platform
             </Typography>
           </Box>
 
-          {error && <Alert severity="error" sx={{ mb: 3.5, borderRadius: 2 }}>{error}</Alert>}
+          {error && (
+            <Alert severity="error" sx={{
+              mb: 3, borderRadius: '10px',
+              background: 'rgba(244,63,94,0.12)',
+              border: '1px solid rgba(244,63,94,0.3)',
+              color: '#FCA5A5',
+              '& .MuiAlert-icon': { color: '#F43F5E' }
+            }}>
+              {error}
+            </Alert>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit}>
@@ -111,9 +142,21 @@ export const Login: React.FC = () => {
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <EmailIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      <EmailIcon sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 20 }} />
                     </InputAdornment>
                   ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#FFFFFF',
+                    '& fieldset': { borderColor: 'rgba(16,185,129,0.25)' },
+                    '&:hover fieldset': { borderColor: 'rgba(16,185,129,0.5)' },
+                    '&.Mui-focused fieldset': { borderColor: '#10B981' },
+                    background: 'rgba(255,255,255,0.05)',
+                    borderRadius: '10px',
+                  },
+                  '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.4)' },
+                  '& .MuiInputLabel-root.Mui-focused': { color: '#10B981' },
                 }}
               />
               <TextField
@@ -126,9 +169,21 @@ export const Login: React.FC = () => {
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <LockIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      <LockIcon sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 20 }} />
                     </InputAdornment>
                   ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#FFFFFF',
+                    '& fieldset': { borderColor: 'rgba(16,185,129,0.25)' },
+                    '&:hover fieldset': { borderColor: 'rgba(16,185,129,0.5)' },
+                    '&.Mui-focused fieldset': { borderColor: '#10B981' },
+                    background: 'rgba(255,255,255,0.05)',
+                    borderRadius: '10px',
+                  },
+                  '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.4)' },
+                  '& .MuiInputLabel-root.Mui-focused': { color: '#10B981' },
                 }}
               />
               <Button
@@ -137,25 +192,51 @@ export const Login: React.FC = () => {
                 size="large"
                 fullWidth
                 disabled={loading}
-                sx={{ py: 1.5, mt: 1 }}
+                sx={{
+                  py: 1.6, mt: 0.5,
+                  background: loading ? 'rgba(16,185,129,0.4)' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  boxShadow: '0 4px 20px rgba(16,185,129,0.4)',
+                  borderRadius: '10px',
+                  fontSize: '1rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.02em',
+                  color: '#fff',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)',
+                    boxShadow: '0 6px 28px rgba(16,185,129,0.55)',
+                  },
+                  transition: 'all 0.25s ease',
+                }}
               >
-                {loading ? 'Authenticating...' : 'Sign In'}
+                {loading ? 'Authenticating…' : 'Sign In'}
               </Button>
             </Stack>
           </form>
 
-          {/* Quick sandbox prefill shortcuts */}
-          <Box sx={{ mt: 4, pt: 3.5, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, display: 'block', mb: 2, textAlign: 'center', letterSpacing: '0.05em' }}>
-              SANDBOX TEST ACCOUNTS
-            </Typography>
-            <Stack direction="row" spacing={2}>
+          {/* Sandbox prefill shortcuts */}
+          <Box sx={{ mt: 4 }}>
+            <Divider sx={{ borderColor: 'rgba(16,185,129,0.12)', mb: 3 }}>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em', fontSize: '0.72rem', fontWeight: 700 }}>
+                DEMO ACCESS
+              </Typography>
+            </Divider>
+            <Stack direction="row" spacing={1.5}>
               <Button
                 variant="outlined"
                 size="small"
                 fullWidth
+                startIcon={<AdminPanelSettingsIcon />}
                 onClick={() => prefillLogin('admin')}
-                sx={{ fontSize: '0.78rem', py: 0.8 }}
+                sx={{
+                  fontSize: '0.78rem', py: 0.9,
+                  borderColor: 'rgba(16,185,129,0.3)',
+                  color: '#34D399',
+                  '&:hover': {
+                    borderColor: '#10B981',
+                    background: 'rgba(16,185,129,0.1)',
+                  },
+                  borderRadius: '8px',
+                }}
               >
                 Super Admin
               </Button>
@@ -163,8 +244,18 @@ export const Login: React.FC = () => {
                 variant="outlined"
                 size="small"
                 fullWidth
+                startIcon={<PersonIcon />}
                 onClick={() => prefillLogin('client')}
-                sx={{ fontSize: '0.78rem', py: 0.8 }}
+                sx={{
+                  fontSize: '0.78rem', py: 0.9,
+                  borderColor: 'rgba(245,158,11,0.3)',
+                  color: '#FCD34D',
+                  '&:hover': {
+                    borderColor: '#F59E0B',
+                    background: 'rgba(245,158,11,0.1)',
+                  },
+                  borderRadius: '8px',
+                }}
               >
                 Survey Client
               </Button>
