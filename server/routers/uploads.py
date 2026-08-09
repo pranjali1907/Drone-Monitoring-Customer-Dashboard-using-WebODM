@@ -280,7 +280,7 @@ def delete_point_cloud(
             orthophoto.model_3d_path,
         ])
         if not has_other_outputs:
-            project.status = "pending"
+            project.status = "draft"
         db.commit()
 
     # Log action

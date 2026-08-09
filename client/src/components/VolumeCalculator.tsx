@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Box, Typography, Paper, Slider, Chip, Grid, Tooltip,
-  TextField, InputAdornment, Divider,
+  TextField, InputAdornment, Divider, ButtonGroup, Button,
 } from '@mui/material';
 
 import StraightenRoundedIcon from '@mui/icons-material/StraightenRounded';
@@ -11,6 +11,9 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded';
 import SwapVertRoundedIcon from '@mui/icons-material/SwapVertRounded';
+import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom';
+import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
+import VerticalAlignTopIcon from '@mui/icons-material/VerticalAlignTop';
 
 export interface PointCloudGeometry {
   vertices: Float32Array | number[];   // flat [x,y,z, x,y,z, ...]
@@ -25,40 +28,56 @@ interface VolumeCalculatorProps {
 }
 
 /**
- * Volume calculation method (matches the YouTube voxel-column approach):
- * 1. Establish a reference plane at height Z_ref
- * 2. For each point above Z_ref  → contributes to CUT volume
- * 3. For each point below Z_ref  → contributes to FILL volume
- * 4. Each point represents a column with area = (width * depth) / sqrt(n_points)
- *    and height = |z - z_ref|
- *
- * This approximates the stockpile / cut-fill volumes used in drone surveying.
+ * Volume calculation method (matches WebODM / Drone Photogrammetry Stockpile Method):
+ * 1. Establish reference plane Z_ref (base elevation)
+ * 2. Calculate cell grid area = (X_extent * Y_extent) / N_points
+ * 3. Cut Volume = Σ max(0, z_i - Z_ref) * cell_area (stockpile material above base)
+ * 4. Fill Volume = Σ max(0, Z_ref - z_i) * cell_area (excavation void below base)
+ * 5. Net Volume = Cut - Fill
  */
 function calculateVolumes(
   geo: PointCloudGeometry,
   zRef: number,
-): { cut: number; fill: number; net: number; pointCount: number } {
+): {
+  cut: number;
+  fill: number;
+  net: number;
+  pointCount: number;
+  zMin: number;
+  zMax: number;
+  zAvg: number;
+  baseArea: number;
+} {
   const verts = geo.vertices;
-  const n = verts instanceof Float32Array ? verts.length / 3 : verts.length / 3;
-  if (n === 0) return { cut: 0, fill: 0, net: 0, pointCount: 0 };
+  const n = verts.length / 3;
+  if (n === 0) return { cut: 0, fill: 0, net: 0, pointCount: 0, zMin: 0, zMax: 0, zAvg: 0, baseArea: 0 };
 
   const bb = geo.boundingBox;
-  const areaTotal = (bb.max.x - bb.min.x) * (bb.max.y - bb.min.y);
-  // Area represented by each point (uniform grid approximation)
-  const cellArea = areaTotal / Math.max(n, 1);
+  const xExtent = bb.max.x - bb.min.x;
+  const yExtent = bb.max.y - bb.min.y;
+  const baseArea = xExtent * yExtent;
+  const cellArea = baseArea / Math.max(n, 1);
 
   let cut = 0;
   let fill = 0;
+  let zSum = 0;
+  let zMin = Infinity;
+  let zMax = -Infinity;
 
   const arr = verts instanceof Float32Array ? verts : new Float32Array(verts);
   for (let i = 0; i < arr.length; i += 3) {
     const z = arr[i + 2];
+    zSum += z;
+    if (z < zMin) zMin = z;
+    if (z > zMax) zMax = z;
+
     const dz = z - zRef;
-    if (dz > 0) cut  += dz * cellArea;  // above baseline → cut
-    else         fill -= dz * cellArea;  // below baseline → fill (positive)
+    if (dz > 0) cut += dz * cellArea;
+    else fill -= dz * cellArea;
   }
 
-  return { cut, fill, net: cut - fill, pointCount: n };
+  const zAvg = zSum / n;
+  return { cut, fill, net: cut - fill, pointCount: n, zMin, zMax, zAvg, baseArea };
 }
 
 const VolumeCard: React.FC<{
@@ -93,7 +112,7 @@ const VolumeCard: React.FC<{
     <Typography sx={{ fontFamily: 'Outfit', fontWeight: 800, fontSize: '1.8rem', color, letterSpacing: '-0.02em', lineHeight: 1 }}>
       {Math.abs(value).toFixed(3)}
     </Typography>
-    <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', mt: 0.3 }}>m³</Typography>
+    <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', mt: 0.3 }}>m³ (Cubic Meters)</Typography>
   </Paper>
 );
 
@@ -123,7 +142,17 @@ export const VolumeCalculator: React.FC<VolumeCalculatorProps> = ({ geometry }) 
     if (!isNaN(n)) setZRef(n);
   };
 
-  const cutPct  = result ? (result.cut  / (result.cut + result.fill + 0.001)) * 100 : 50;
+  const setPresetZ = (preset: 'lowest' | 'avg' | 'highest') => {
+    let target = zMid;
+    if (preset === 'lowest' && result) target = result.zMin;
+    else if (preset === 'highest' && result) target = result.zMax;
+    else if (preset === 'avg' && result) target = result.zAvg;
+
+    setZRef(target);
+    setInputVal(target.toFixed(3));
+  };
+
+  const cutPct  = result ? (result.cut / (result.cut + result.fill + 0.001)) * 100 : 50;
   const fillPct = result ? (result.fill / (result.cut + result.fill + 0.001)) * 100 : 50;
 
   return (
@@ -137,14 +166,14 @@ export const VolumeCalculator: React.FC<VolumeCalculatorProps> = ({ geometry }) 
           </Box>
           <Box>
             <Typography sx={{ fontFamily: 'Outfit', fontWeight: 800, fontSize: '1.1rem', color: '#0F172A' }}>
-              Volume Calculator
+              Stockpile &amp; Earthwork Volume Calculator
             </Typography>
             <Typography sx={{ fontSize: '0.75rem', color: '#64748B' }}>
-              Cut / Fill / Net volumes from point cloud reference plane
+              Drone Photogrammetry Grid Integration Method (WebODM Standard)
             </Typography>
           </Box>
           <Chip
-            label={result ? `${result.pointCount.toLocaleString()} pts` : 'No cloud'}
+            label={result ? `${result.pointCount.toLocaleString()} 3D points` : 'No cloud'}
             size="small"
             sx={{ ml: 'auto', bgcolor: '#F0FDF4', color: '#059669', fontWeight: 700, fontSize: '0.72rem' }}
           />
@@ -155,22 +184,36 @@ export const VolumeCalculator: React.FC<VolumeCalculatorProps> = ({ geometry }) 
             <TerrainRoundedIcon sx={{ fontSize: 48, color: '#A7F3D0', mb: 1.5 }} />
             <Typography sx={{ fontWeight: 600, color: '#475569' }}>No point cloud loaded</Typography>
             <Typography variant="body2" sx={{ color: '#94A3B8', mt: 0.5 }}>
-              Upload and open a .ply file in the 3D viewer to calculate volumes.
+              Upload and open a .ply file in the 3D viewer above to calculate volumes.
             </Typography>
           </Box>
         ) : (
           <>
             <Divider sx={{ my: 2.5, borderColor: '#E2E8F0' }} />
 
-            {/* Reference Plane Control */}
+            {/* Reference Plane Control & Presets */}
             <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <StraightenRoundedIcon sx={{ fontSize: 16, color: '#6366F1' }} />
                   <Typography sx={{ fontWeight: 700, color: '#0F172A', fontSize: '0.88rem' }}>
-                    Reference Elevation Plane (Z)
+                    Base Reference Datum Elevation (Z ref)
                   </Typography>
                 </Box>
+
+                {/* Base Level Quick Presets */}
+                <ButtonGroup size="small" variant="outlined" sx={{ borderRadius: '10px' }}>
+                  <Button startIcon={<VerticalAlignBottomIcon />} onClick={() => setPresetZ('lowest')} sx={{ fontSize: '0.72rem', fontWeight: 600 }}>
+                    Lowest Base ({result?.zMin.toFixed(2)}m)
+                  </Button>
+                  <Button startIcon={<VerticalAlignCenterIcon />} onClick={() => setPresetZ('avg')} sx={{ fontSize: '0.72rem', fontWeight: 600 }}>
+                    Mean Ground ({result?.zAvg.toFixed(2)}m)
+                  </Button>
+                  <Button startIcon={<VerticalAlignTopIcon />} onClick={() => setPresetZ('highest')} sx={{ fontSize: '0.72rem', fontWeight: 600 }}>
+                    Peak ({result?.zMax.toFixed(2)}m)
+                  </Button>
+                </ButtonGroup>
+
                 <TextField
                   value={inputVal}
                   onChange={handleInputChange}
@@ -180,7 +223,7 @@ export const VolumeCalculator: React.FC<VolumeCalculatorProps> = ({ geometry }) 
                     endAdornment: <InputAdornment position="end"><Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>m</Typography></InputAdornment>,
                   }}
                   sx={{
-                    width: 110,
+                    width: 120,
                     '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: '0.85rem', fontFamily: 'monospace', fontWeight: 700 },
                   }}
                 />
@@ -204,8 +247,8 @@ export const VolumeCalculator: React.FC<VolumeCalculatorProps> = ({ geometry }) 
               />
 
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>Min Z: {zMin.toFixed(3)}m</Typography>
-                <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>Max Z: {zMax.toFixed(3)}m</Typography>
+                <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>Min: {zMin.toFixed(3)}m</Typography>
+                <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8' }}>Max: {zMax.toFixed(3)}m</Typography>
               </Box>
             </Box>
 
@@ -215,43 +258,43 @@ export const VolumeCalculator: React.FC<VolumeCalculatorProps> = ({ geometry }) 
                 <Grid container spacing={2} sx={{ mb: 3 }}>
                   <Grid item xs={12} sm={4}>
                     <VolumeCard
-                      label="Cut Volume"
+                      label="Cut Volume (Stockpile)"
                       value={result.cut}
                       color="#EF4444"
                       bg="rgba(239,68,68,0.04)"
                       border="rgba(239,68,68,0.2)"
                       icon={<ArrowUpwardRoundedIcon />}
-                      tooltip="Volume of material above the reference plane (material to be removed)"
+                      tooltip="Volume of material above reference plane (stockpile to be removed)"
                     />
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <VolumeCard
-                      label="Fill Volume"
+                      label="Fill Volume (Void)"
                       value={result.fill}
                       color="#22C55E"
                       bg="rgba(34,197,94,0.04)"
                       border="rgba(34,197,94,0.2)"
                       icon={<ArrowDownwardRoundedIcon />}
-                      tooltip="Volume of void below the reference plane (material needed to fill)"
+                      tooltip="Volume of void space below reference plane (backfill required)"
                     />
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <VolumeCard
-                      label="Net Volume"
+                      label="Net Earthwork Balance"
                       value={result.net}
                       color={result.net >= 0 ? '#EF4444' : '#22C55E'}
                       bg={result.net >= 0 ? 'rgba(239,68,68,0.04)' : 'rgba(34,197,94,0.04)'}
                       border={result.net >= 0 ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)'}
                       icon={<SwapVertRoundedIcon />}
-                      tooltip="Cut minus Fill. Positive = net excavation, Negative = net fill needed"
+                      tooltip="Cut minus Fill volume. Positive = net material surplus, Negative = net fill requirement"
                     />
                   </Grid>
                 </Grid>
 
                 {/* Cut/Fill Bar Chart */}
-                <Box sx={{ mb: 2 }}>
+                <Box sx={{ mb: 2.5 }}>
                   <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', mb: 1 }}>
-                    Cut vs Fill Ratio
+                    Cut vs Fill Material Balance Ratio
                   </Typography>
                   <Box sx={{ borderRadius: '8px', overflow: 'hidden', height: 18, display: 'flex', bgcolor: '#F1F5F9' }}>
                     <Box sx={{ width: `${cutPct}%`, bgcolor: '#EF4444', transition: 'width 0.4s ease' }} />
@@ -260,21 +303,25 @@ export const VolumeCalculator: React.FC<VolumeCalculatorProps> = ({ geometry }) 
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.8 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                       <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: '#EF4444' }} />
-                      <Typography sx={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Cut {cutPct.toFixed(1)}%</Typography>
+                      <Typography sx={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Cut (Stockpile) {cutPct.toFixed(1)}%</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                       <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: '#22C55E' }} />
-                      <Typography sx={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Fill {fillPct.toFixed(1)}%</Typography>
+                      <Typography sx={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Fill (Excavation) {fillPct.toFixed(1)}%</Typography>
                     </Box>
                   </Box>
                 </Box>
 
-                {/* Method Note */}
-                <Box sx={{ p: 1.5, borderRadius: '10px', bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                  <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8', lineHeight: 1.5 }}>
-                    <strong>Method:</strong> Voxel column approximation — each point represents a terrain column
-                    with area = (X-extent × Y-extent) / N points. Volume = Σ(|ΔZ| × cell area).
-                    Adjust the Z reference plane to match your site's base elevation for accurate results.
+                {/* Mathematical Formula Explanation */}
+                <Box sx={{ p: 2, borderRadius: '12px', bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#0F172A', mb: 0.5 }}>
+                    Calculation Formula &amp; Survey Metrics:
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.72rem', color: '#64748B', lineHeight: 1.6 }}>
+                    • <strong>Total Footprint Area:</strong> {result.baseArea.toFixed(2)} m²<br />
+                    • <strong>Base Plane Elevation (Z ref):</strong> {zRef.toFixed(3)} m<br />
+                    • <strong>Integration Formula:</strong> Volume = Σ (z_i - Z_ref) × (Base Area / N)<br />
+                    • Click <strong>Lowest Base ({result.zMin.toFixed(2)}m)</strong> to set the ground datum at the bottom of your stockpile for full volume measurement.
                   </Typography>
                 </Box>
               </>
