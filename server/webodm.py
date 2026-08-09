@@ -68,9 +68,18 @@ class WebODMClient:
             return mock_task_id
 
         try:
-            # Default options if not provided
             if not options:
-                options = [{"name": "dsm", "value": "true"}, {"name": "dtm", "value": "true"}]
+                options = [
+                    {"name": "dsm", "value": "true"},
+                    {"name": "dtm", "value": "true"},
+                    {"name": "fast-orthophoto", "value": "true"},
+                    {"name": "feature-quality", "value": "low"},
+                    {"name": "point-cloud-quality", "value": "low"},
+                    {"name": "min-num-features", "value": "4000"},
+                    {"name": "mesh-size", "value": "50000"},
+                    {"name": "orthophoto-resolution", "value": "5.0"},
+                    {"name": "dem-resolution", "value": "5.0"}
+                ]
                 
             response = requests.post(
                 f"{self.url}/api/projects/{project_id}/tasks/",
