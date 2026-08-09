@@ -49,17 +49,31 @@ def upload_drone_images(
         # Mock coordinates near the project center or slightly offset
         lat_offset = (len(saved_images) * 0.0001) if project.latitude else 0.0
         lng_offset = (len(saved_images) * 0.0001) if project.longitude else 0.0
-        
+        lat_val = (project.latitude or 0.0) + lat_offset
+        lng_val = (project.longitude or 0.0) + lng_offset
+
+        geom_val = None
+        if models.has_geoalchemy and not models.is_sqlite:
+            try:
+                from shapely.geometry import Point
+                from geoalchemy2.shape import from_shape
+                geom_val = from_shape(Point(lng_val, lat_val), srid=4326)
+            except Exception as g_err:
+                print(f"[WARN] Point shape conversion notice: {g_err}")
+                geom_val = None
+        else:
+            geom_val = f"{lng_val}, {lat_val}"
+
         new_image = models.DroneImage(
             project_id=project_id,
             filename=file.filename,
             filepath=f"static/uploads/project_{project_id}/{file.filename}",
             filesize=size,
             capture_time=datetime.datetime.utcnow() - datetime.timedelta(days=1),
-            latitude=(project.latitude or 0.0) + lat_offset,
-            longitude=(project.longitude or 0.0) + lng_offset,
-            altitude=120.0 + (len(saved_images) * 0.5), # Simulated 120m height
-            geom=f"{(project.longitude or 0.0) + lng_offset}, {(project.latitude or 0.0) + lat_offset}"
+            latitude=lat_val,
+            longitude=lng_val,
+            altitude=120.0 + (len(saved_images) * 0.5),
+            geom=geom_val
         )
         db.add(new_image)
         saved_images.append(new_image)
