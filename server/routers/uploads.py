@@ -263,8 +263,12 @@ def delete_point_cloud(
 
     # Delete file from disk if it exists
     ply_path = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}", "point_cloud.ply")
-    if os.path.exists(ply_path):
-        os.remove(ply_path)
+    try:
+        if os.path.exists(ply_path):
+            os.remove(ply_path)
+    except OSError as exc:
+        # Log but don't crash — file may have already been removed
+        print(f"[WARN] Could not remove ply file: {exc}")
 
     # Clear the DB path
     if orthophoto:

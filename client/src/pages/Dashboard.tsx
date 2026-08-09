@@ -3,9 +3,10 @@ import {
   Box, Grid, Typography, Card, CardContent,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   CircularProgress, Button, Chip, Avatar, LinearProgress,
-  Stack, Divider,
+  Stack, Divider, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Tooltip,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
@@ -17,6 +18,8 @@ import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import FlightRoundedIcon from '@mui/icons-material/FlightRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded';
+import DeleteForeverRoundedIcon from '@mui/icons-material/DeleteForeverRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 
 const formatStorage = (bytes: number) => {
   if (!bytes) return '0 B';
@@ -72,27 +75,43 @@ const KpiCard: React.FC<{
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statsRes, projRes] = await Promise.all([
-          axios.get('/api/dashboard/stats'),
-          axios.get('/api/projects'),
-        ]);
-        setStats(statsRes.data);
-        setProjects(projRes.data);
-      } catch (err) {
-        console.error('Dashboard fetch error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  const fetchData = async () => {
+    try {
+      const [statsRes, projRes] = await Promise.all([
+        axios.get('/api/dashboard/stats'),
+        axios.get('/api/projects'),
+      ]);
+      setStats(statsRes.data);
+      setProjects(projRes.data);
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleDeleteProject = async () => {
+    if (!deleteId) return;
+    setDeleteLoading(true);
+    try {
+      await axios.delete(`/api/projects/${deleteId}`);
+      setDeleteId(null);
+      await fetchData();
+    } catch (err) {
+      console.error('Delete project error:', err);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -133,6 +152,7 @@ export const Dashboard: React.FC = () => {
   const recentLogs: any[] = stats?.latest_uploads ?? [];
 
   return (
+    <>
     <Box className="page-enter" sx={{ py: 3.5, px: { xs: 2, md: 3 } }}>
 
       {/* ── Page Header ────────────────────────────────────────────── */}
@@ -265,19 +285,39 @@ export const Dashboard: React.FC = () => {
                               </Box>
                             </TableCell>
                             <TableCell align="right">
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => navigate(`/projects/${proj.id}`)}
-                                endIcon={<ArrowForwardRoundedIcon />}
-                                sx={{
-                                  fontSize: '0.78rem', py: 0.5, px: 1.5, borderRadius: '8px',
-                                  borderColor: '#E2E8F0', color: '#475569',
-                                  '&:hover': { borderColor: '#6366F1', color: '#6366F1', bgcolor: 'rgba(99,102,241,0.05)' },
-                                }}
-                              >
-                                Open
-                              </Button>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.8 }}>
+                                {isAdmin && (
+                                  <Tooltip title="Delete project">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => setDeleteId(proj.id)}
+                                      sx={{
+                                        color: '#EF4444',
+                                        bgcolor: 'rgba(239,68,68,0.05)',
+                                        border: '1px solid rgba(239,68,68,0.15)',
+                                        borderRadius: '8px',
+                                        width: 32, height: 32,
+                                        '&:hover': { bgcolor: '#FEE2E2', borderColor: '#EF4444' },
+                                      }}
+                                    >
+                                      <DeleteForeverRoundedIcon sx={{ fontSize: 17 }} />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={() => navigate(`/projects/${proj.id}`)}
+                                  endIcon={<ArrowForwardRoundedIcon />}
+                                  sx={{
+                                    fontSize: '0.78rem', py: 0.5, px: 1.5, borderRadius: '8px',
+                                    borderColor: '#E2E8F0', color: '#475569',
+                                    '&:hover': { borderColor: '#6366F1', color: '#6366F1', bgcolor: 'rgba(99,102,241,0.05)' },
+                                  }}
+                                >
+                                  Open
+                                </Button>
+                              </Box>
                             </TableCell>
                           </TableRow>
                         );
@@ -374,6 +414,51 @@ export const Dashboard: React.FC = () => {
         </Grid>
       </Grid>
     </Box>
+
+      {/* ── Delete Confirmation Dialog ─────────────────────── */}
+      <Dialog
+        open={!!deleteId}
+        onClose={() => !deleteLoading && setDeleteId(null)}
+        PaperProps={{ sx: { borderRadius: '16px', p: 0.5, maxWidth: 420 } }}
+      >
+        <DialogTitle sx={{ fontFamily: 'Outfit', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <WarningAmberRoundedIcon sx={{ color: '#EF4444', fontSize: 22 }} />
+          </Box>
+          Delete Project
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: '#475569', fontSize: '0.9rem' }}>
+            Are you sure you want to permanently delete project <strong>#{deleteId}</strong>?
+            This will remove all associated data including uploads, outputs, and logs.
+          </Typography>
+          <Typography sx={{ color: '#EF4444', fontSize: '0.82rem', fontWeight: 600, mt: 1.5, bgcolor: '#FEF2F2', p: 1.5, borderRadius: '8px', border: '1px solid #FECACA' }}>
+            ⚠ This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button
+            onClick={() => setDeleteId(null)}
+            disabled={deleteLoading}
+            sx={{ borderRadius: '10px', color: '#64748B', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleDeleteProject}
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteForeverRoundedIcon />}
+            sx={{
+              borderRadius: '10px', bgcolor: '#EF4444', fontWeight: 700,
+              '&:hover': { bgcolor: '#DC2626' },
+            }}
+          >
+            {deleteLoading ? 'Deleting…' : 'Delete Permanently'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 

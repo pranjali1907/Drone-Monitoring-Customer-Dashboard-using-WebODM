@@ -1,58 +1,60 @@
 import React, { useState } from 'react';
-import { Box, Button, TextField, Typography, Card, CardContent, Alert, InputAdornment, Stack, Divider } from '@mui/material';
-import { useAuth } from '../context/AuthContext';
+import {
+  Box, Typography, TextField, Button, InputAdornment,
+  IconButton, Alert, CircularProgress, Divider,
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
-import EmailIcon from '@mui/icons-material/Email';
-import LockIcon from '@mui/icons-material/Lock';
-import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import PersonIcon from '@mui/icons-material/Person';
+import EmailRoundedIcon from '@mui/icons-material/EmailRounded';
+import LockRoundedIcon from '@mui/icons-material/LockRounded';
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
+import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
+import SecurityRoundedIcon from '@mui/icons-material/SecurityRounded';
 
 export const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const [email, setEmail]         = useState('');
+  const [password, setPassword]   = useState('');
+  const [confirm, setConfirm]     = useState('');
+  const [showPass, setShowPass]   = useState(false);
+  const [showConf, setShowConf]   = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
-
-    setLoading(true);
     setError(null);
 
+    if (!email || !password || !confirm) {
+      setError('Please fill in all fields.');
+      return;
+    }
+    if (password !== confirm) {
+      setError('Passwords do not match. Please re-enter your password.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.append('username', email);
-      params.append('password', password);
-
-      const res = await axios.post('/api/auth/login', params, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      });
-
-      login(res.data.access_token);
+      await login(email, password);
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Authentication failed. Please check your credentials.');
+    } catch {
+      setError('Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const prefillLogin = (role: 'admin' | 'client') => {
-    if (role === 'admin') {
-      setEmail('admin@dronemonitor.com');
-      setPassword('admin123');
-    } else {
-      setEmail('client@dronemonitor.com');
-      setPassword('client123');
-    }
-  };
+  const passwordMismatch = confirm.length > 0 && password !== confirm;
+  const passwordMatch    = confirm.length > 0 && password === confirm;
 
   return (
     <Box
@@ -61,209 +63,263 @@ export const Login: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(ellipse at 20% 10%, #0F2B1A 0%, #0A1A10 55%, #031208 100%)',
-        p: 2,
+        background: 'linear-gradient(135deg, #064E3B 0%, #065F46 40%, #047857 70%, #0F172A 100%)',
         position: 'relative',
         overflow: 'hidden',
+        p: 2,
       }}
     >
-      {/* Ambient green light orbs */}
-      <Box sx={{ position: 'absolute', width: 500, height: 500, bgcolor: 'rgba(16,185,129,0.07)', borderRadius: '50%', filter: 'blur(90px)', top: '-15%', left: '-15%', pointerEvents: 'none' }} />
-      <Box sx={{ position: 'absolute', width: 400, height: 400, bgcolor: 'rgba(245,158,11,0.05)', borderRadius: '50%', filter: 'blur(80px)', bottom: '-20%', right: '-10%', pointerEvents: 'none' }} />
-      <Box sx={{ position: 'absolute', width: 300, height: 300, bgcolor: 'rgba(16,185,129,0.05)', borderRadius: '50%', filter: 'blur(70px)', top: '40%', right: '20%', pointerEvents: 'none' }} />
+      {/* Ambient glow orbs */}
+      <Box sx={{ position: 'absolute', top: '-15%', left: '-10%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <Box sx={{ position: 'absolute', bottom: '-20%', right: '-10%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(245,158,11,0.10) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <Box sx={{ position: 'absolute', top: '40%', left: '60%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-      {/* Subtle grid overlay */}
-      <Box sx={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        backgroundImage: 'linear-gradient(rgba(16,185,129,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.04) 1px, transparent 1px)',
-        backgroundSize: '60px 60px',
-      }} />
-
-      <Card sx={{
-        width: '100%', maxWidth: 460, zIndex: 10,
-        borderRadius: '20px',
-        background: 'rgba(255,255,255,0.03)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        border: '1px solid rgba(16,185,129,0.2)',
-        boxShadow: '0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.1) inset',
-      }}>
-        <CardContent sx={{ p: 4.5 }}>
-          {/* Logo Header */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
+      {/* Login Card */}
+      <Box
+        component="form"
+        onSubmit={handleSubmit}
+        noValidate
+        sx={{
+          position: 'relative', zIndex: 1,
+          width: '100%', maxWidth: 440,
+          bgcolor: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '24px',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          p: { xs: 3, sm: 4.5 },
+          boxShadow: '0 25px 80px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Logo */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
+          <Box
+            sx={{
+              bgcolor: 'rgba(255,255,255,0.95)',
+              borderRadius: '16px',
+              p: 1.5,
+              mb: 2.5,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+            }}
+          >
             <Box
-              sx={{
-                width: 56,
-                height: 56,
-                borderRadius: '16px',
-                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                boxShadow: '0 0 28px rgba(16, 185, 129, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                mb: 2.5,
-                animation: 'float 4s ease-in-out infinite'
-              }}
-            >
-              <FlightTakeoffIcon sx={{ fontSize: 30, color: 'white', transform: 'rotate(45deg)' }} />
-            </Box>
-            <Typography variant="h4" sx={{
-              fontFamily: 'Outfit', fontWeight: 800, textAlign: 'center',
-              color: '#FFFFFF', letterSpacing: '-0.02em',
-            }}>
-              SKYE<span style={{ color: '#10B981' }}>VIEW</span>
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.45)', mt: 0.8, textAlign: 'center', fontSize: '0.85rem' }}>
-              Drone Photogrammetry & Monitoring Platform
-            </Typography>
+              component="img"
+              src="/eagle-logo.png"
+              alt="Eagle Infra India Ltd."
+              sx={{ height: 64, width: 'auto', display: 'block', objectFit: 'contain' }}
+            />
           </Box>
+          <Typography
+            sx={{
+              fontFamily: 'Outfit', fontWeight: 800, fontSize: '1.6rem',
+              color: '#ECFDF5', letterSpacing: '-0.02em', lineHeight: 1,
+            }}
+          >
+            Eagle Infra
+          </Typography>
+          <Typography sx={{ color: 'rgba(167,243,208,0.8)', fontWeight: 500, fontSize: '0.85rem', mt: 0.3 }}>
+            India Ltd. · SkyeView Drone Platform
+          </Typography>
+        </Box>
 
-          {error && (
-            <Alert severity="error" sx={{
-              mb: 3, borderRadius: '10px',
-              background: 'rgba(244,63,94,0.12)',
-              border: '1px solid rgba(244,63,94,0.3)',
-              color: '#FCA5A5',
-              '& .MuiAlert-icon': { color: '#F43F5E' }
-            }}>
-              {error}
-            </Alert>
-          )}
+        {/* Security badge */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.8, mb: 3 }}>
+          <SecurityRoundedIcon sx={{ fontSize: 14, color: 'rgba(167,243,208,0.6)' }} />
+          <Typography sx={{ fontSize: '0.72rem', color: 'rgba(167,243,208,0.6)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Secure Access — Password Verified
+          </Typography>
+        </Box>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit}>
-            <Stack spacing={2.5}>
-              <TextField
-                label="Email Address"
-                variant="outlined"
-                fullWidth
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <EmailIcon sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 20 }} />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    color: '#FFFFFF',
-                    '& fieldset': { borderColor: 'rgba(16,185,129,0.25)' },
-                    '&:hover fieldset': { borderColor: 'rgba(16,185,129,0.5)' },
-                    '&.Mui-focused fieldset': { borderColor: '#10B981' },
-                    background: 'rgba(255,255,255,0.05)',
-                    borderRadius: '10px',
-                  },
-                  '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.4)' },
-                  '& .MuiInputLabel-root.Mui-focused': { color: '#10B981' },
-                }}
-              />
-              <TextField
-                label="Password"
-                type="password"
-                variant="outlined"
-                fullWidth
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <LockIcon sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 20 }} />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    color: '#FFFFFF',
-                    '& fieldset': { borderColor: 'rgba(16,185,129,0.25)' },
-                    '&:hover fieldset': { borderColor: 'rgba(16,185,129,0.5)' },
-                    '&.Mui-focused fieldset': { borderColor: '#10B981' },
-                    background: 'rgba(255,255,255,0.05)',
-                    borderRadius: '10px',
-                  },
-                  '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.4)' },
-                  '& .MuiInputLabel-root.Mui-focused': { color: '#10B981' },
-                }}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                fullWidth
-                disabled={loading}
-                sx={{
-                  py: 1.6, mt: 0.5,
-                  background: loading ? 'rgba(16,185,129,0.4)' : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                  boxShadow: '0 4px 20px rgba(16,185,129,0.4)',
-                  borderRadius: '10px',
-                  fontSize: '1rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.02em',
-                  color: '#fff',
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)',
-                    boxShadow: '0 6px 28px rgba(16,185,129,0.55)',
-                  },
-                  transition: 'all 0.25s ease',
-                }}
-              >
-                {loading ? 'Authenticating…' : 'Sign In'}
-              </Button>
-            </Stack>
-          </form>
+        {/* Error Alert */}
+        {error && (
+          <Alert
+            severity="error"
+            sx={{
+              mb: 2.5, borderRadius: '12px',
+              bgcolor: 'rgba(239,68,68,0.12)', color: '#FCA5A5',
+              border: '1px solid rgba(239,68,68,0.25)',
+              '& .MuiAlert-icon': { color: '#F87171' },
+            }}
+          >
+            {error}
+          </Alert>
+        )}
 
-          {/* Sandbox prefill shortcuts */}
-          <Box sx={{ mt: 4 }}>
-            <Divider sx={{ borderColor: 'rgba(16,185,129,0.12)', mb: 3 }}>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em', fontSize: '0.72rem', fontWeight: 700 }}>
-                DEMO ACCESS
+        {/* Email */}
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(167,243,208,0.9)', mb: 0.8, letterSpacing: '0.04em' }}>
+            Email Address
+          </Typography>
+          <TextField
+            id="login-email"
+            type="email"
+            fullWidth
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            autoComplete="email"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <EmailRoundedIcon sx={{ color: 'rgba(167,243,208,0.5)', fontSize: 18 }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: 'rgba(255,255,255,0.06)',
+                borderRadius: '12px',
+                color: '#ECFDF5',
+                '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' },
+                '&:hover fieldset': { borderColor: 'rgba(16,185,129,0.4)' },
+                '&.Mui-focused fieldset': { borderColor: '#10B981', borderWidth: 2 },
+                '& input': { color: '#ECFDF5', '&::placeholder': { color: 'rgba(167,243,208,0.35)', opacity: 1 } },
+                '& input:-webkit-autofill': { WebkitBoxShadow: '0 0 0 100px rgba(6,78,59,0.8) inset', WebkitTextFillColor: '#ECFDF5' },
+              },
+            }}
+          />
+        </Box>
+
+        {/* Password */}
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(167,243,208,0.9)', mb: 0.8, letterSpacing: '0.04em' }}>
+            Password
+          </Typography>
+          <TextField
+            id="login-password"
+            type={showPass ? 'text' : 'password'}
+            fullWidth
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            autoComplete="current-password"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LockRoundedIcon sx={{ color: 'rgba(167,243,208,0.5)', fontSize: 18 }} />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setShowPass(p => !p)} sx={{ color: 'rgba(167,243,208,0.5)' }}>
+                    {showPass ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: 'rgba(255,255,255,0.06)',
+                borderRadius: '12px',
+                color: '#ECFDF5',
+                '& fieldset': { borderColor: 'rgba(255,255,255,0.12)' },
+                '&:hover fieldset': { borderColor: 'rgba(16,185,129,0.4)' },
+                '&.Mui-focused fieldset': { borderColor: '#10B981', borderWidth: 2 },
+                '& input': { color: '#ECFDF5', '&::placeholder': { color: 'rgba(167,243,208,0.35)', opacity: 1 } },
+                '& input:-webkit-autofill': { WebkitBoxShadow: '0 0 0 100px rgba(6,78,59,0.8) inset', WebkitTextFillColor: '#ECFDF5' },
+              },
+            }}
+          />
+        </Box>
+
+        {/* Confirm Password */}
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
+            <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(167,243,208,0.9)', letterSpacing: '0.04em' }}>
+              Confirm Password
+            </Typography>
+            {passwordMismatch && (
+              <Typography sx={{ fontSize: '0.7rem', color: '#FCA5A5', fontWeight: 600 }}>
+                ✗ Passwords don't match
               </Typography>
-            </Divider>
-            <Stack direction="row" spacing={1.5}>
-              <Button
-                variant="outlined"
-                size="small"
-                fullWidth
-                startIcon={<AdminPanelSettingsIcon />}
-                onClick={() => prefillLogin('admin')}
-                sx={{
-                  fontSize: '0.78rem', py: 0.9,
-                  borderColor: 'rgba(16,185,129,0.3)',
-                  color: '#34D399',
-                  '&:hover': {
-                    borderColor: '#10B981',
-                    background: 'rgba(16,185,129,0.1)',
-                  },
-                  borderRadius: '8px',
-                }}
-              >
-                Super Admin
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                fullWidth
-                startIcon={<PersonIcon />}
-                onClick={() => prefillLogin('client')}
-                sx={{
-                  fontSize: '0.78rem', py: 0.9,
-                  borderColor: 'rgba(245,158,11,0.3)',
-                  color: '#FCD34D',
-                  '&:hover': {
-                    borderColor: '#F59E0B',
-                    background: 'rgba(245,158,11,0.1)',
-                  },
-                  borderRadius: '8px',
-                }}
-              >
-                Survey Client
-              </Button>
-            </Stack>
+            )}
+            {passwordMatch && (
+              <Typography sx={{ fontSize: '0.7rem', color: '#34D399', fontWeight: 600 }}>
+                ✓ Passwords match
+              </Typography>
+            )}
           </Box>
-        </CardContent>
-      </Card>
+          <TextField
+            id="login-confirm-password"
+            type={showConf ? 'text' : 'password'}
+            fullWidth
+            value={confirm}
+            onChange={e => setConfirm(e.target.value)}
+            placeholder="Re-enter your password"
+            autoComplete="current-password"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LockRoundedIcon sx={{ color: passwordMismatch ? 'rgba(239,68,68,0.6)' : passwordMatch ? 'rgba(52,211,153,0.7)' : 'rgba(167,243,208,0.5)', fontSize: 18 }} />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setShowConf(p => !p)} sx={{ color: 'rgba(167,243,208,0.5)' }}>
+                    {showConf ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: passwordMismatch ? 'rgba(239,68,68,0.06)' : passwordMatch ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.06)',
+                borderRadius: '12px',
+                color: '#ECFDF5',
+                '& fieldset': {
+                  borderColor: passwordMismatch ? 'rgba(239,68,68,0.4)' : passwordMatch ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.12)',
+                },
+                '&:hover fieldset': { borderColor: passwordMismatch ? 'rgba(239,68,68,0.6)' : 'rgba(16,185,129,0.4)' },
+                '&.Mui-focused fieldset': {
+                  borderColor: passwordMismatch ? '#EF4444' : '#10B981',
+                  borderWidth: 2,
+                },
+                '& input': { color: '#ECFDF5', '&::placeholder': { color: 'rgba(167,243,208,0.35)', opacity: 1 } },
+                '& input:-webkit-autofill': { WebkitBoxShadow: '0 0 0 100px rgba(6,78,59,0.8) inset', WebkitTextFillColor: '#ECFDF5' },
+              },
+            }}
+          />
+        </Box>
+
+        {/* Submit */}
+        <Button
+          id="login-submit-btn"
+          type="submit"
+          fullWidth
+          variant="contained"
+          disabled={loading || passwordMismatch}
+          startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <LoginRoundedIcon />}
+          sx={{
+            py: 1.6, borderRadius: '12px', fontFamily: 'Outfit', fontWeight: 700,
+            fontSize: '1rem', textTransform: 'none',
+            background: loading || passwordMismatch
+              ? 'rgba(16,185,129,0.3)'
+              : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+            boxShadow: '0 6px 20px rgba(16,185,129,0.35)',
+            letterSpacing: '0.02em',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)',
+              boxShadow: '0 8px 28px rgba(16,185,129,0.45)',
+              transform: 'translateY(-1px)',
+            },
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {loading ? 'Signing In…' : 'Sign In Securely'}
+        </Button>
+
+        <Divider sx={{ my: 3, borderColor: 'rgba(255,255,255,0.08)' }}>
+          <Typography sx={{ fontSize: '0.7rem', color: 'rgba(167,243,208,0.4)', px: 1 }}>
+            EAGLE INFRA INDIA LTD.
+          </Typography>
+        </Divider>
+
+        <Typography sx={{ textAlign: 'center', fontSize: '0.72rem', color: 'rgba(167,243,208,0.4)' }}>
+          SkyeView Drone Monitoring Platform · v2.0
+        </Typography>
+      </Box>
     </Box>
   );
 };
+
 export default Login;

@@ -8,12 +8,16 @@ import TerrainIcon from '@mui/icons-material/Terrain';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CloudDownloadRoundedIcon from '@mui/icons-material/CloudDownloadRounded';
 
+import { PointCloudGeometry } from './VolumeCalculator';
+
 interface ThreeDViewerProps {
   /** Optional URL to a server-saved .ply file — auto-loads on mount when provided */
   pointCloudUrl?: string;
+  /** Called after geometry is parsed so the parent can run volume calculations */
+  onGeometryLoaded?: (geo: PointCloudGeometry) => void;
 }
 
-export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => {
+export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl, onGeometryLoaded }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [renderMode, setRenderMode] = useState<'points' | 'mesh'>('points');
   const [rotationSpeed, setRotationSpeed] = useState<number>(0.5);
@@ -40,6 +44,18 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
         setLoadedGeometry(geometry);
         setServerLoaded(true);
         setFileName('point_cloud.ply (server)');
+        // Expose geometry to parent for volume calculation
+        if (onGeometryLoaded) {
+          geometry.computeBoundingBox();
+          const pos = geometry.attributes.position;
+          onGeometryLoaded({
+            vertices: pos ? (pos.array as Float32Array) : new Float32Array(),
+            boundingBox: {
+              min: { x: geometry.boundingBox!.min.x, y: geometry.boundingBox!.min.y, z: geometry.boundingBox!.min.z },
+              max: { x: geometry.boundingBox!.max.x, y: geometry.boundingBox!.max.y, z: geometry.boundingBox!.max.z },
+            },
+          });
+        }
       })
       .catch(err => {
         console.warn('Could not load server PLY:', err);
@@ -64,6 +80,18 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl }) => 
         setLoadedGeometry(geometry);
         setServerLoaded(false);
         setRenderMode('points');
+        // Expose geometry to parent for volume calculation
+        if (onGeometryLoaded) {
+          geometry.computeBoundingBox();
+          const pos = geometry.attributes.position;
+          onGeometryLoaded({
+            vertices: pos ? (pos.array as Float32Array) : new Float32Array(),
+            boundingBox: {
+              min: { x: geometry.boundingBox!.min.x, y: geometry.boundingBox!.min.y, z: geometry.boundingBox!.min.z },
+              max: { x: geometry.boundingBox!.max.x, y: geometry.boundingBox!.max.y, z: geometry.boundingBox!.max.z },
+            },
+          });
+        }
       } catch (err) {
         console.error('Error parsing PLY file:', err);
         alert('Failed to parse PLY file. Please ensure it is a valid ASCII or binary .ply file.');

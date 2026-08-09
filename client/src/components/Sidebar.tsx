@@ -177,25 +177,22 @@ export const Sidebar: React.FC = () => {
         <Box sx={{ mx: 2, mt: activeJobs.length > 0 ? 1 : 'auto', pt: 1 }}>
           <Box
             sx={{
-              p: 1.5, borderRadius: '10px', bgcolor: '#F8FAFC', border: '1px solid #E2E8F0',
+              p: 1.5, borderRadius: '12px', bgcolor: '#F8FAFC', border: '1px solid #E2E8F0',
               display: 'flex', alignItems: 'center', gap: 1.5,
             }}
           >
             <Box
-              sx={{
-                width: 28, height: 28, borderRadius: '7px',
-                background: 'linear-gradient(135deg,#6366F1,#4F46E5)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Typography sx={{ color: '#fff', fontSize: '0.75rem', fontWeight: 800, fontFamily: 'Outfit' }}>SW</Typography>
-            </Box>
+              component="img"
+              src="/eagle-logo.png"
+              alt="Eagle Infra India Ltd."
+              sx={{ height: 36, width: 'auto', objectFit: 'contain' }}
+            />
             <Box>
-              <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#0F172A', fontFamily: 'Outfit', lineHeight: 1 }}>
-                SkyeView Pro
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#0F172A', fontFamily: 'Outfit', lineHeight: 1 }}>
+                Eagle Infra
               </Typography>
-              <Typography sx={{ fontSize: '0.65rem', color: '#94A3B8', lineHeight: 1.3 }}>
-                v2.0 · WebODM Cloud
+              <Typography sx={{ fontSize: '0.62rem', color: '#94A3B8', lineHeight: 1.3 }}>
+                India Ltd.
               </Typography>
             </Box>
           </Box>

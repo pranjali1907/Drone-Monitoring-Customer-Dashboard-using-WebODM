@@ -1,7 +1,6 @@
 import React from 'react';
 import { AppBar, Toolbar, Typography, Box, Avatar, Chip, IconButton, Badge, Tooltip } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
-import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -15,8 +14,8 @@ export const Navbar: React.FC = () => {
 
   const avatarGradient =
     user?.role === 'admin'
-      ? 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)'
-      : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)';
+      ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
+      : 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)';
 
   return (
     <AppBar position="fixed" elevation={0} sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
@@ -24,29 +23,29 @@ export const Navbar: React.FC = () => {
 
         {/* ── Brand ─────────────────────────────────────────── */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          {/* Eagle Infra India Ltd. Logo */}
           <Box
+            component="img"
+            src="/eagle-logo.png"
+            alt="Eagle Infra India Ltd."
             sx={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 38, height: 38, borderRadius: '11px',
-              background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
-              boxShadow: '0 0 0 0 rgba(99,102,241,0.4)',
-              animation: 'pulse-ring 2.5s infinite',
+              height: 44,
+              width: 'auto',
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.08))',
             }}
-          >
-            <FlightTakeoffIcon sx={{ color: '#fff', fontSize: 20, animation: 'float 3s ease-in-out infinite' }} />
-          </Box>
-          <Box>
+          />
+          <Box sx={{ borderLeft: '1px solid #E2E8F0', pl: 1.5 }}>
             <Typography
               variant="h6"
               sx={{
-                fontFamily: 'Outfit', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1,
-                background: 'linear-gradient(135deg, #0F172A 0%, #6366F1 100%)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+                fontFamily: 'Outfit', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1,
+                color: '#0F172A', fontSize: '1rem',
               }}
             >
               SkyeView
             </Typography>
-            <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 500, lineHeight: 1, fontSize: '0.65rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 500, lineHeight: 1, fontSize: '0.62rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               Drone Platform
             </Typography>
           </Box>
@@ -55,28 +54,26 @@ export const Navbar: React.FC = () => {
         {/* ── Right Controls ────────────────────────────────── */}
         {user && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* Search */}
             <Tooltip title="Search projects">
               <IconButton
                 size="small"
                 sx={{
                   backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px',
                   width: 38, height: 38, color: '#64748B',
-                  '&:hover': { backgroundColor: '#F1F5F9', color: '#6366F1' },
+                  '&:hover': { backgroundColor: '#F0FDF4', color: '#10B981' },
                 }}
               >
                 <SearchIcon fontSize="small" />
               </IconButton>
             </Tooltip>
 
-            {/* Notifications */}
             <Tooltip title="Notifications">
               <IconButton
                 size="small"
                 sx={{
                   backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px',
                   width: 38, height: 38, color: '#64748B',
-                  '&:hover': { backgroundColor: '#F1F5F9', color: '#6366F1' },
+                  '&:hover': { backgroundColor: '#F0FDF4', color: '#10B981' },
                 }}
               >
                 <Badge badgeContent={3} color="error" sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', minWidth: 16, height: 16 } }}>
@@ -85,10 +82,8 @@ export const Navbar: React.FC = () => {
               </IconButton>
             </Tooltip>
 
-            {/* Divider */}
             <Box sx={{ width: 1, height: 28, bgcolor: '#E2E8F0', mx: 0.5 }} />
 
-            {/* User Info */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: 0.5 }}>
               <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', lineHeight: 1.2, fontSize: '0.85rem' }}>
@@ -109,20 +104,18 @@ export const Navbar: React.FC = () => {
                 {initials}
               </Avatar>
 
-              {/* Role badge */}
               <Chip
                 label={user.role.toUpperCase()}
                 size="small"
                 sx={{
                   height: 22, fontSize: '0.62rem', fontWeight: 800,
-                  bgcolor: user.role === 'admin' ? 'rgba(99,102,241,0.1)' : 'rgba(20,184,166,0.1)',
-                  color: user.role === 'admin' ? '#6366F1' : '#0D9488',
-                  border: `1px solid ${user.role === 'admin' ? 'rgba(99,102,241,0.2)' : 'rgba(20,184,166,0.2)'}`,
+                  bgcolor: user.role === 'admin' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                  color: user.role === 'admin' ? '#059669' : '#B45309',
+                  border: `1px solid ${user.role === 'admin' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.25)'}`,
                   display: { xs: 'none', md: 'flex' },
                 }}
               />
 
-              {/* Logout */}
               <Tooltip title="Sign out">
                 <IconButton
                   size="small"

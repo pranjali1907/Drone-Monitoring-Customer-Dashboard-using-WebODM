@@ -11,6 +11,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
 import DeleteForeverRoundedIcon from '@mui/icons-material/DeleteForeverRounded';
+import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
 
 interface UploadManagerProps {
   projectId: number;
@@ -37,6 +38,14 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
   const [plyProgress, setPlyProgress] = useState(0);
   const [plyMessage, setPlyMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const plyInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Video upload state ───────────────────────────────────────────────────
+  const [videoFile, setVideoFile]   = useState<File | null>(null);
+  const [videoDragActive, setVideoDragActive] = useState(false);
+  const [videoUploading, setVideoUploading]   = useState(false);
+  const [videoProgress, setVideoProgress]     = useState(0);
+  const [videoMessage, setVideoMessage]       = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   // ── Image drag handlers ─────────────────────────────────────────────────
   const handleDrag = (e: React.DragEvent) => {
@@ -149,9 +158,51 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
       await axios.delete(`/api/uploads/project/${projectId}/ply`);
       setPlyMessage({ type: 'success', text: 'Point cloud deleted. 3D Model tab will lock until a new .ply is uploaded.' });
       setPlyFile(null);
-      onUploadSuccess(); // Refresh project state
+      onUploadSuccess();
     } catch (err: any) {
       setPlyMessage({ type: 'error', text: err.response?.data?.detail || 'Delete failed.' });
+    }
+  };
+
+  // ── Video handlers ───────────────────────────────────────────────────────
+  const handleVideoDrag = (e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') setVideoDragActive(true);
+    else if (e.type === 'dragleave') setVideoDragActive(false);
+  };
+
+  const handleVideoDrop = (e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setVideoDragActive(false);
+    const dropped = Array.from(e.dataTransfer.files).find(f => /\.(mp4|mov|avi)$/i.test(f.name));
+    if (dropped) setVideoFile(dropped);
+  };
+
+  const handleVideoFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) setVideoFile(e.target.files[0]);
+  };
+
+  const handleVideoUpload = async () => {
+    if (!videoFile) return;
+    setVideoUploading(true);
+    setVideoProgress(20);
+    setVideoMessage(null);
+    const formData = new FormData();
+    formData.append('file', videoFile);
+    try {
+      const interval = setInterval(() => setVideoProgress(prev => prev < 85 ? prev + 10 : prev), 600);
+      await axios.post(`/api/uploads/project/${projectId}/video`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      clearInterval(interval);
+      setVideoProgress(100);
+      setVideoMessage({ type: 'success', text: `Video "${videoFile.name}" uploaded successfully!` });
+      setVideoFile(null);
+      onUploadSuccess();
+    } catch (err: any) {
+      setVideoMessage({ type: 'error', text: err.response?.data?.detail || 'Video upload failed.' });
+    } finally {
+      setVideoUploading(false);
     }
   };
 
@@ -367,6 +418,80 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
             startIcon={<CheckCircleIcon />}
           >
             Upload Point Cloud to Server
+          </Button>
+        )}
+      </Paper>
+
+      <Divider sx={{ borderColor: '#D1FAE5' }} />
+
+      {/* ── Section C: Video Upload ───────────────────────────────────── */}
+      <Paper
+        elevation={0}
+        sx={{ p: 3, border: '1px solid rgba(245,158,11,0.2)', borderRadius: '14px', bgcolor: 'rgba(245,158,11,0.02)' }}
+      >
+        <Typography variant="subtitle1" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <VideoLibraryRoundedIcon sx={{ color: '#F59E0B' }} /> Drone Video Upload
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
+          Upload a drone survey video (<strong>.mp4, .mov, .avi</strong>). Videos appear in the Videos tab and can be used in Before/After video comparison.
+        </Typography>
+
+        {videoMessage && (
+          <Alert severity={videoMessage.type} sx={{ mb: 2.5, borderRadius: '10px' }} onClose={() => setVideoMessage(null)}>
+            {videoMessage.text}
+          </Alert>
+        )}
+
+        <Paper
+          elevation={0}
+          onDragEnter={handleVideoDrag} onDragOver={handleVideoDrag}
+          onDragLeave={handleVideoDrag} onDrop={handleVideoDrop}
+          onClick={() => videoInputRef.current?.click()}
+          sx={{
+            border: '2px dashed',
+            borderColor: videoDragActive ? '#F59E0B' : videoFile ? '#10B981' : 'rgba(245,158,11,0.3)',
+            borderRadius: '12px', p: 4, textAlign: 'center', cursor: 'pointer',
+            bgcolor: videoDragActive ? 'rgba(245,158,11,0.06)' : videoFile ? 'rgba(16,185,129,0.04)' : '#FFFFFF',
+            transition: 'all 0.25s ease',
+            '&:hover': { borderColor: '#F59E0B', bgcolor: 'rgba(245,158,11,0.04)' },
+          }}
+        >
+          <input ref={videoInputRef} type="file" accept=".mp4,.mov,.avi" onChange={handleVideoFileInput} style={{ display: 'none' }} />
+          <VideoLibraryRoundedIcon sx={{ fontSize: 40, color: videoFile ? '#10B981' : 'rgba(245,158,11,0.45)', mb: 1.2 }} />
+          {videoFile ? (
+            <>
+              <Typography variant="body1" sx={{ fontWeight: 700, color: '#10B981' }}>✓ {videoFile.name}</Typography>
+              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>{(videoFile.size / (1024*1024)).toFixed(2)} MB — click to change</Typography>
+            </>
+          ) : (
+            <>
+              <Typography variant="body1" sx={{ fontWeight: 600, color: '#0F172A' }}>Drag &amp; drop a video file here</Typography>
+              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>MP4, MOV, AVI formats supported</Typography>
+            </>
+          )}
+        </Paper>
+
+        {videoUploading && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" sx={{ color: '#64748B', mb: 0.5, display: 'block' }}>Uploading video…</Typography>
+            <LinearProgress variant="determinate" value={videoProgress} sx={{ height: 6, borderRadius: 3, '& .MuiLinearProgress-bar': { bgcolor: '#F59E0B' } }} />
+          </Box>
+        )}
+
+        {videoFile && !videoUploading && (
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={handleVideoUpload}
+            sx={{
+              mt: 2.5, borderRadius: '10px',
+              background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+              boxShadow: '0 4px 14px rgba(245,158,11,0.35)',
+              '&:hover': { background: 'linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%)' },
+            }}
+            startIcon={<CheckCircleIcon />}
+          >
+            Upload Video to Server
           </Button>
         )}
       </Paper>

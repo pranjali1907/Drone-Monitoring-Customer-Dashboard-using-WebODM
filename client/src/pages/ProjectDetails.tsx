@@ -14,6 +14,8 @@ import MapView from '../components/MapView';
 import ThreeDViewer from '../components/ThreeDViewer';
 import UploadManager from '../components/UploadManager';
 import ComparisonSlider from '../components/ComparisonSlider';
+import VolumeCalculator from '../components/VolumeCalculator';
+import type { PointCloudGeometry } from '../components/VolumeCalculator';
 
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
@@ -213,6 +215,7 @@ export const ProjectDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
+  const [pointCloudGeo, setPointCloudGeo] = useState<PointCloudGeometry | null>(null);
 
   const fetchProjectDetails = useCallback(async () => {
     try {
@@ -339,7 +342,13 @@ export const ProjectDetails: React.FC = () => {
       {/* ── Tab 1: 3D Viewer ─────────────────────────────────── */}
       <TabPanel value={activeTab} index={1}>
         {(project.status === 'completed' || serverPlyPath) ? (
-          <ThreeDViewer pointCloudUrl={serverPlyPath} />
+          <>
+            <ThreeDViewer
+              pointCloudUrl={serverPlyPath}
+              onGeometryLoaded={setPointCloudGeo}
+            />
+            <VolumeCalculator geometry={pointCloudGeo} />
+          </>
         ) : (
           <EmptyPanel
             icon={<ViewInArRoundedIcon sx={{ fontSize: 36, color: '#A7F3D0' }} />}
@@ -351,7 +360,11 @@ export const ProjectDetails: React.FC = () => {
 
       {/* ── Tab 2: Comparison Slider ─────────────────────────── */}
       <TabPanel value={activeTab} index={2}>
-        <ComparisonSlider projectId={project.id} />
+        <ComparisonSlider
+          projectId={project.id}
+          images={project.images ?? []}
+          videos={project.videos ?? []}
+        />
       </TabPanel>
 
       {/* ── Tab 3: Image Gallery ─────────────────────────────── */}
