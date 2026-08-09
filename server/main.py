@@ -50,6 +50,40 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.PROCESSED_DIR, exist_ok=True)
 os.makedirs(settings.REPORTS_DIR, exist_ok=True)
 
+import shutil
+def cleanup_orphaned_project_folders():
+    """Find and delete storage folders for projects that no longer exist in the database."""
+    try:
+        from server.database import SessionLocal
+        db = SessionLocal()
+        try:
+            active_ids = {p.id for p in db.query(models.Project.id).all()}
+        finally:
+            db.close()
+
+        deleted_count = 0
+        for base_dir in [settings.UPLOAD_DIR, settings.PROCESSED_DIR, settings.REPORTS_DIR]:
+            if not os.path.exists(base_dir):
+                continue
+            for folder in os.listdir(base_dir):
+                if folder.startswith("project_"):
+                    try:
+                        proj_id = int(folder.replace("project_", ""))
+                        if proj_id not in active_ids:
+                            full_path = os.path.join(base_dir, folder)
+                            shutil.rmtree(full_path)
+                            print(f"[CLEANUP] Purged orphaned storage folder: {full_path}")
+                            deleted_count += 1
+                    except (ValueError, OSError) as e:
+                        pass
+        return deleted_count
+    except Exception as err:
+        print(f"[WARN] Orphaned storage cleanup notice: {err}")
+        return 0
+
+# Purge orphaned storage directories for deleted projects
+cleanup_orphaned_project_folders()
+
 # Mount static asset folders to serve files (orthophotos, videos, reports)
 app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 app.mount("/static/processed", StaticFiles(directory=settings.PROCESSED_DIR), name="processed")

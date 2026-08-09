@@ -165,3 +165,9 @@ def unassign_client_from_project(project_id: int, client_id: int, current_admin:
         project.assigned_clients.remove(client)
         db.commit()
     return {"message": f"Revoked access for {client.email} from project {project.name}"}
+
+@router.post("/cleanup-orphaned-data")
+def trigger_orphan_data_cleanup():
+    from server.main import cleanup_orphaned_project_folders
+    count = cleanup_orphaned_project_folders()
+    return {"message": f"Successfully cleaned up {count} orphaned project data storage folders."}
