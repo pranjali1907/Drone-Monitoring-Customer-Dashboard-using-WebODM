@@ -119,6 +119,17 @@ def delete_project(project_id: int, current_admin: models.User = Depends(auth.ge
         
     db.delete(project)
     db.commit()
+
+    # Physically delete project directories from disk / cloud storage
+    import os, shutil
+    from server.config import settings
+    for base_dir in [settings.UPLOAD_DIR, settings.PROCESSED_DIR, settings.REPORTS_DIR]:
+        folder_path = os.path.join(base_dir, f"project_{project_id}")
+        if os.path.exists(folder_path):
+            try:
+                shutil.rmtree(folder_path)
+            except Exception as e:
+                print(f"[WARN] Could not remove folder {folder_path}: {e}")
     
     try:
         log = models.ActivityLog(

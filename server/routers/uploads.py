@@ -198,3 +198,41 @@ def delete_point_cloud(
         db.commit()
 
     return {"message": "Point cloud deleted successfully"}
+
+@router.delete("/image/{image_id}")
+def delete_drone_image(image_id: int, db: Session = Depends(get_db)):
+    image = db.query(models.DroneImage).filter(models.DroneImage.id == image_id).first()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    if image.filepath:
+        rel_path = image.filepath.replace("static/uploads/", "")
+        full_path = os.path.join(settings.UPLOAD_DIR, rel_path)
+        if os.path.exists(full_path):
+            try:
+                os.remove(full_path)
+            except Exception as e:
+                print(f"[WARN] Failed to delete image file {full_path}: {e}")
+
+    db.delete(image)
+    db.commit()
+    return {"message": "Image deleted successfully"}
+
+@router.delete("/video/{video_id}")
+def delete_drone_video(video_id: int, db: Session = Depends(get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    if video.filepath:
+        rel_path = video.filepath.replace("static/uploads/", "")
+        full_path = os.path.join(settings.UPLOAD_DIR, rel_path)
+        if os.path.exists(full_path):
+            try:
+                os.remove(full_path)
+            except Exception as e:
+                print(f"[WARN] Failed to delete video file {full_path}: {e}")
+
+    db.delete(video)
+    db.commit()
+    return {"message": "Video deleted successfully"}

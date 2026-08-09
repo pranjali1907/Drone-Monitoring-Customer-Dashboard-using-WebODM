@@ -237,7 +237,7 @@ def run_simulated_processing(project_id: int, job_id: int, db_session_maker):
     ]
     
     for progress, logs in steps:
-        time.sleep(2.5)  # Make it feel like a real quick background job
+        time.sleep(1.0)  # Smooth fast background simulation
         db = db_session_maker()
         try:
             job = db.query(models.ProcessingJob).filter(models.ProcessingJob.id == job_id).first()

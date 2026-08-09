@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Tabs, Tab, CircularProgress, Card, CardContent,
-  Grid, Button, Chip, Paper, Alert, Divider,
+  Grid, Button, Chip, Paper, Alert, Divider, IconButton,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Select, MenuItem, FormControl, InputLabel, Stack,
 } from '@mui/material';
@@ -33,6 +33,7 @@ import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded';
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
 import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded';
 import PersonRemoveRoundedIcon from '@mui/icons-material/PersonRemoveRounded';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string; dot: string }> = {
   completed:  { label: 'Completed',  bg: '#DCFCE7', color: '#166534', dot: '#22C55E' },
@@ -228,6 +229,24 @@ export const ProjectDetails: React.FC = () => {
     }
   }, [id, navigate]);
 
+  const handleDeleteImage = async (imageId: number) => {
+    try {
+      await axios.delete(`/api/uploads/image/${imageId}`);
+      fetchProjectDetails();
+    } catch (err) {
+      console.error('Failed to delete image:', err);
+    }
+  };
+
+  const handleDeleteVideo = async (videoId: number) => {
+    try {
+      await axios.delete(`/api/uploads/video/${videoId}`);
+      fetchProjectDetails();
+    } catch (err) {
+      console.error('Failed to delete video:', err);
+    }
+  };
+
   useEffect(() => { fetchProjectDetails(); }, [fetchProjectDetails]);
 
   if (loading) {
@@ -400,6 +419,21 @@ export const ProjectDetails: React.FC = () => {
                         sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, bgcolor: 'rgba(0,0,0,0.55)', color: '#fff' }}
                       />
                     </Box>
+                    {isAdmin && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteImage(img.id)}
+                        sx={{
+                          position: 'absolute', top: 8, left: 8,
+                          bgcolor: 'rgba(239,68,68,0.85)', color: '#fff',
+                          '&:hover': { bgcolor: '#EF4444' },
+                          width: 26, height: 26,
+                        }}
+                        title="Delete image"
+                      >
+                        <DeleteOutlineIcon sx={{ fontSize: 15 }} />
+                      </IconButton>
+                    )}
                   </Box>
                   <CardContent sx={{ p: 1.5 }}>
                     <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', color: '#0F172A', mb: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -423,7 +457,7 @@ export const ProjectDetails: React.FC = () => {
             Drone Flight Videos
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748B' }}>
-            Thermal or optical video logs recorded during the aerial survey.
+            Thermal or optical video logs recorded during the aerial survey. Upload and view multiple flight video cards.
           </Typography>
         </Box>
         {!project.videos?.length ? (
@@ -433,24 +467,37 @@ export const ProjectDetails: React.FC = () => {
             subtitle="Upload drone flight videos via the Admin Pipeline tab."
           />
         ) : (
-          <Grid container spacing={3} justifyContent="center">
+          <Grid container spacing={3}>
             {project.videos.map((vid: any) => (
-              <Grid item xs={12} md={9} key={vid.id}>
-                <Card sx={{ overflow: 'hidden' }}>
+              <Grid item xs={12} sm={6} md={4} key={vid.id}>
+                <Card sx={{ overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <video
                     controls
                     src={`${API_URL}/${vid.filepath}`}
-                    style={{ width: '100%', display: 'block', maxHeight: 480, backgroundColor: '#0F172A' }}
+                    style={{ width: '100%', display: 'block', height: 220, backgroundColor: '#0F172A', objectFit: 'cover' }}
                   />
-                  <CardContent sx={{ p: 2.5 }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: '1rem', fontFamily: 'Outfit', color: '#0F172A', mb: 0.5 }}>
-                      {vid.title}
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 2 }}>
-                      <Typography variant="caption" sx={{ color: '#94A3B8' }}>MP4 format</Typography>
-                      <Typography variant="caption" sx={{ color: '#94A3B8' }}>Duration: {vid.duration ?? 65}s</Typography>
-                      <Typography variant="caption" sx={{ color: '#94A3B8' }}>Size: {(vid.filesize / (1024 * 1024)).toFixed(1)} MB</Typography>
+                  <CardContent sx={{ p: 2, flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <Box>
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', fontFamily: 'Outfit', color: '#0F172A', mb: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {vid.title}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                        <Typography variant="caption" sx={{ color: '#94A3B8' }}>MP4</Typography>
+                        <Typography variant="caption" sx={{ color: '#94A3B8' }}>{(vid.filesize / (1024 * 1024)).toFixed(1)} MB</Typography>
+                      </Box>
                     </Box>
+                    {isAdmin && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        onClick={() => handleDeleteVideo(vid.id)}
+                        startIcon={<DeleteOutlineIcon />}
+                        sx={{ borderRadius: '8px', textTransform: 'none', mt: 2, fontSize: '0.75rem', borderColor: '#FCA5A5', color: '#EF4444', '&:hover': { bgcolor: '#FEE2E2', borderColor: '#EF4444' } }}
+                      >
+                        Delete Video
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               </Grid>
