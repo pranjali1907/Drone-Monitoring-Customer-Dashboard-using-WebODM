@@ -45,8 +45,7 @@ def upload_drone_images(
         # Extract size
         size = os.path.getsize(file_path)
 
-        # Create image database record (mocking EXIF tags for now)
-        # Mock coordinates near the project center or slightly offset
+        # Mock coordinates near project center
         lat_offset = (len(saved_images) * 0.0001) if project.latitude else 0.0
         lng_offset = (len(saved_images) * 0.0001) if project.longitude else 0.0
         lat_val = (project.latitude or 0.0) + lat_offset
@@ -55,11 +54,10 @@ def upload_drone_images(
         geom_val = None
         if models.has_geoalchemy and not models.is_sqlite:
             try:
-                from shapely.geometry import Point
-                from geoalchemy2.shape import from_shape
-                geom_val = from_shape(Point(lng_val, lat_val), srid=4326)
+                from geoalchemy2.elements import WKTElement
+                geom_val = WKTElement(f"POINT({lng_val} {lat_val})", srid=4326)
             except Exception as g_err:
-                print(f"[WARN] Point shape conversion notice: {g_err}")
+                print(f"[WARN] WKTElement point conversion notice: {g_err}")
                 geom_val = None
         else:
             geom_val = f"{lng_val}, {lat_val}"
@@ -82,14 +80,17 @@ def upload_drone_images(
     for img in saved_images:
         db.refresh(img)
 
-    # Log action
-    log = models.ActivityLog(
-        user_id=current_admin.id, 
-        action="UPLOAD_IMAGES", 
-        details=f"Uploaded {len(files)} raw drone images to project ID {project_id}"
-    )
-    db.add(log)
-    db.commit()
+    # Log action safely
+    try:
+        log = models.ActivityLog(
+            user_id=current_admin.id if current_admin else None, 
+            action="UPLOAD_IMAGES", 
+            details=f"Uploaded {len(files)} raw drone images to project ID {project_id}"
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        pass
 
     return saved_images
 
@@ -122,32 +123,34 @@ def upload_drone_video(
 
     new_video = models.Video(
         project_id=project_id,
-        title=os.path.splitext(file.filename)[0],
+        title=file.filename,
         filename=file.filename,
         filepath=f"static/uploads/project_{project_id}/{file.filename}",
         filesize=size,
-        duration=65  # Simulating 65s video length
+        duration=0
     )
     db.add(new_video)
     db.commit()
     db.refresh(new_video)
 
-    # Log action
-    log = models.ActivityLog(
-        user_id=current_admin.id, 
-        action="UPLOAD_VIDEO", 
-        details=f"Uploaded video: {file.filename} to project ID {project_id}"
-    )
-    db.add(log)
-    db.commit()
+    try:
+        log = models.ActivityLog(
+            user_id=current_admin.id if current_admin else None,
+            action="UPLOAD_VIDEO",
+            details=f"Uploaded video {file.filename} to project ID {project_id}"
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        pass
 
     return new_video
 
-@router.post("/project/{project_id}/report", response_model=schemas.ReportResponse)
+@router.post("/project/{project_id}/reports/{report_type}", response_model=schemas.ReportResponse)
 def upload_project_report(
     project_id: int,
+    report_type: str,
     title: str,
-    report_type: str, # 'pdf', 'excel'
     file: UploadFile = File(...),
     current_admin: models.User = Depends(auth.get_current_admin),
     db: Session = Depends(get_db)
@@ -180,20 +183,22 @@ def upload_project_report(
         title=title,
         report_type=report_type,
         filepath=f"static/reports/project_{project_id}/{file.filename}",
-        created_by=current_admin.id
+        created_by=current_admin.id if current_admin else None
     )
     db.add(new_report)
     db.commit()
     db.refresh(new_report)
 
-    # Log action
-    log = models.ActivityLog(
-        user_id=current_admin.id, 
-        action="UPLOAD_REPORT", 
-        details=f"Uploaded report: {title} ({report_type}) to project ID {project_id}"
-    )
-    db.add(log)
-    db.commit()
+    try:
+        log = models.ActivityLog(
+            user_id=current_admin.id if current_admin else None, 
+            action="UPLOAD_REPORT", 
+            details=f"Uploaded report: {title} ({report_type}) to project ID {project_id}"
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        pass
 
     return new_report
 
@@ -224,10 +229,8 @@ def upload_point_cloud(
     with open(dest_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Static URL used by frontend
     static_path = f"static/processed/project_{project_id}/point_cloud.ply"
 
-    # Upsert Orthophoto record
     orthophoto = (
         db.query(models.Orthophoto)
         .filter(models.Orthophoto.project_id == project_id)
@@ -242,19 +245,20 @@ def upload_point_cloud(
         )
         db.add(orthophoto)
 
-    # Mark project as completed so the 3D Model tab unlocks
     project.status = "completed"
     db.commit()
     db.refresh(orthophoto)
 
-    # Log action
-    log = models.ActivityLog(
-        user_id=current_admin.id,
-        action="UPLOAD_PLY",
-        details=f"Uploaded point cloud .ply for project ID {project_id}",
-    )
-    db.add(log)
-    db.commit()
+    try:
+        log = models.ActivityLog(
+            user_id=current_admin.id if current_admin else None,
+            action="UPLOAD_PLY",
+            details=f"Uploaded point cloud .ply for project ID {project_id}",
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        pass
 
     return {"message": "Point cloud uploaded successfully", "point_cloud_path": static_path}
 
@@ -275,19 +279,15 @@ def delete_point_cloud(
         .first()
     )
 
-    # Delete file from disk if it exists
     ply_path = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}", "point_cloud.ply")
     try:
         if os.path.exists(ply_path):
             os.remove(ply_path)
     except OSError as exc:
-        # Log but don't crash — file may have already been removed
         print(f"[WARN] Could not remove ply file: {exc}")
 
-    # Clear the DB path
     if orthophoto:
         orthophoto.point_cloud_path = None
-        # If no other outputs exist, revert status to pending
         has_other_outputs = any([
             orthophoto.orthophoto_path,
             orthophoto.dsm_path,
@@ -297,13 +297,15 @@ def delete_point_cloud(
             project.status = "draft"
         db.commit()
 
-    # Log action
-    log = models.ActivityLog(
-        user_id=current_admin.id,
-        action="DELETE_PLY",
-        details=f"Deleted point cloud .ply for project ID {project_id}",
-    )
-    db.add(log)
-    db.commit()
+    try:
+        log = models.ActivityLog(
+            user_id=current_admin.id if current_admin else None,
+            action="DELETE_PLY",
+            details=f"Deleted point cloud .ply for project ID {project_id}",
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        pass
 
     return {"message": "Point cloud deleted successfully"}
