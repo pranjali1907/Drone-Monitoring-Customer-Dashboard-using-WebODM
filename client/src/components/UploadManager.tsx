@@ -79,16 +79,19 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
     files.forEach(file => formData.append('files', file));
     try {
       const interval = setInterval(() => setUploadProgress(prev => prev < 90 ? prev + 15 : prev), 500);
-      await axios.post(`/api/uploads/project/${projectId}/images`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await axios.post(`/api/uploads/project/${projectId}/images`, formData);
       clearInterval(interval);
       setUploadProgress(100);
       setStatusMessage({ type: 'success', text: `Uploaded ${files.length} images successfully!` });
       setFiles([]);
       onUploadSuccess();
     } catch (err: any) {
-      setStatusMessage({ type: 'error', text: err.response?.data?.detail || 'Upload failed' });
+      const detail = err.response?.data?.detail;
+      let msg = 'Upload failed.';
+      if (typeof detail === 'string') msg = detail;
+      else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg || d).join(', ');
+      else if (err.message) msg = err.message;
+      setStatusMessage({ type: 'error', text: msg });
     } finally {
       setIsUploading(false);
     }
@@ -137,16 +140,19 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
     formData.append('file', plyFile);
     try {
       const interval = setInterval(() => setPlyProgress(prev => prev < 85 ? prev + 15 : prev), 400);
-      await axios.post(`/api/uploads/project/${projectId}/ply`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await axios.post(`/api/uploads/project/${projectId}/ply`, formData);
       clearInterval(interval);
       setPlyProgress(100);
       setPlyMessage({ type: 'success', text: `Point cloud "${plyFile.name}" uploaded! 3D Model tab is now unlocked.` });
       setPlyFile(null);
       onUploadSuccess(); // Reload project → unlocks 3D tab
     } catch (err: any) {
-      setPlyMessage({ type: 'error', text: err.response?.data?.detail || 'PLY upload failed.' });
+      const detail = err.response?.data?.detail;
+      let msg = 'PLY upload failed.';
+      if (typeof detail === 'string') msg = detail;
+      else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg || d).join(', ');
+      else if (err.message) msg = err.message;
+      setPlyMessage({ type: 'error', text: msg });
     } finally {
       setPlyUploading(false);
     }
@@ -191,16 +197,19 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
     formData.append('file', videoFile);
     try {
       const interval = setInterval(() => setVideoProgress(prev => prev < 85 ? prev + 10 : prev), 600);
-      await axios.post(`/api/uploads/project/${projectId}/video`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await axios.post(`/api/uploads/project/${projectId}/video`, formData);
       clearInterval(interval);
       setVideoProgress(100);
       setVideoMessage({ type: 'success', text: `Video "${videoFile.name}" uploaded successfully!` });
       setVideoFile(null);
       onUploadSuccess();
     } catch (err: any) {
-      setVideoMessage({ type: 'error', text: err.response?.data?.detail || 'Video upload failed.' });
+      const detail = err.response?.data?.detail;
+      let msg = 'Video upload failed.';
+      if (typeof detail === 'string') msg = detail;
+      else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg || d).join(', ');
+      else if (err.message) msg = err.message;
+      setVideoMessage({ type: 'error', text: msg });
     } finally {
       setVideoUploading(false);
     }
