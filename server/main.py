@@ -21,6 +21,15 @@ from server.routers import webodm_jobs as jobs_router
 # Initialize database tables
 Base.metadata.create_all(bind=engine)
 
+# Ensure schema alignment for drone_images table on PostgreSQL
+try:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE drone_images DROP COLUMN IF EXISTS geom;"))
+        conn.commit()
+except Exception as _schema_err:
+    print(f"[WARN] Schema alignment notice: {_schema_err}")
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Backend API server for Cloud-Based Drone Monitoring & Customer Dashboard",

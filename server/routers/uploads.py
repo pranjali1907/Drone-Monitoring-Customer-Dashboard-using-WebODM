@@ -46,8 +46,7 @@ def upload_drone_images(
             capture_time=datetime.datetime.utcnow(),
             latitude=lat_val,
             longitude=lng_val,
-            altitude=120.0 + (len(saved_images) * 0.5),
-            geom=f"{lng_val}, {lat_val}"
+            altitude=120.0 + (len(saved_images) * 0.5)
         )
         db.add(new_image)
         saved_images.append(new_image)

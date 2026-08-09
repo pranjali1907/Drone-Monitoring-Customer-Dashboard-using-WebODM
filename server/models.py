@@ -82,9 +82,6 @@ class DroneImage(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     altitude = Column(Float, nullable=True)
-
-    geom = Column(String(255), nullable=True)
-
     uploaded_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
     # Relationships
