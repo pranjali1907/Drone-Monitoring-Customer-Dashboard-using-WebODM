@@ -14,7 +14,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: boolean;
   loading: boolean;
-  login: (token: string) => void;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -47,40 +47,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const AUTO_EMAIL    = 'admin@dronemonitor.com';
+  const AUTO_PASSWORD = 'admin123';
+
   useEffect(() => {
     const initializeAuth = async () => {
+      // Try existing token first
       if (token) {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         const decoded = parseJwt(token);
         if (decoded && decoded.exp * 1000 > Date.now()) {
-          setUser({
-            email: decoded.sub,
-            role: decoded.role,
-          });
-          
+          setUser({ email: decoded.sub, role: decoded.role });
           try {
             const res = await axios.get('/api/auth/me');
             setUser(prev => prev ? { ...prev, full_name: res.data.full_name } : null);
           } catch {
-            logout();
+            // token invalid — fall through to auto-login
           }
           setLoading(false);
           return;
         }
       }
 
-      // No valid token — clear auth state and let ProtectedRoute redirect to /login
-      delete axios.defaults.headers.common['Authorization'];
-      setUser(null);
-      setLoading(false);
+      // No valid token — auto-login silently
+      try {
+        const form = new URLSearchParams();
+        form.append('username', AUTO_EMAIL);
+        form.append('password', AUTO_PASSWORD);
+        const res = await axios.post('/api/auth/login', form, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+        const newToken = res.data.access_token;
+        localStorage.setItem('token', newToken);
+        setToken(newToken);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+        const decoded = parseJwt(newToken);
+        setUser({ email: decoded.sub, role: decoded.role });
+        try {
+          const me = await axios.get('/api/auth/me');
+          setUser(prev => prev ? { ...prev, full_name: me.data.full_name } : null);
+        } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('[Auth] Auto-login failed — manual login required:', err);
+        delete axios.defaults.headers.common['Authorization'];
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     };
 
     initializeAuth();
-  }, [token]);
+  }, []);
 
-  const login = (newToken: string) => {
+  const login = async (email: string, password: string) => {
+    const form = new URLSearchParams();
+    form.append('username', email);
+    form.append('password', password);
+    const res = await axios.post('/api/auth/login', form, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+    const newToken = res.data.access_token;
     localStorage.setItem('token', newToken);
     setToken(newToken);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+    const decoded = parseJwt(newToken);
+    setUser({ email: decoded.sub, role: decoded.role });
+    try {
+      const me = await axios.get('/api/auth/me');
+      setUser(prev => prev ? { ...prev, full_name: me.data.full_name } : null);
+    } catch { /* ignore */ }
   };
 
   const logout = () => {

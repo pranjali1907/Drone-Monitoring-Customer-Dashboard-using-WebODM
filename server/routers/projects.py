@@ -27,6 +27,7 @@ def create_project(project_in: schemas.ProjectCreate, current_admin: models.User
         latitude=project_in.latitude,
         longitude=project_in.longitude,
         boundary=project_in.boundary, # Stored as GeoJSON string or geometry
+        survey_date=project_in.survey_date,
         status="draft"
     )
     db.add(new_project)

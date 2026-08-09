@@ -52,10 +52,15 @@ app.include_router(projects_router.router)
 app.include_router(uploads_router.router)
 app.include_router(jobs_router.router)
 
+from server.seed_demo import seed_demo_data
+
 # Database seeding
 @app.on_event("startup")
 def seed_database():
-    db = next(get_db())
+    try:
+        seed_demo_data()
+    except Exception as e:
+        print(f"[SEED] Startup error: {e}")
     try:
         # Check if admin user exists
         admin = db.query(models.User).filter(models.User.email == "admin@dronemonitor.com").first()

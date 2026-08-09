@@ -70,7 +70,13 @@ export const CreateProject: React.FC = () => {
       });
       navigate(`/projects/${res.data.id}`);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create project. Please try again.');
+      let msg = 'Failed to create project. Please try again.';
+      if (typeof err.response?.data?.detail === 'string') {
+        msg = err.response.data.detail;
+      } else if (Array.isArray(err.response?.data?.detail)) {
+        msg = err.response.data.detail.map((d: any) => `${d.loc?.slice(-1)}: ${d.msg}`).join(' | ');
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
