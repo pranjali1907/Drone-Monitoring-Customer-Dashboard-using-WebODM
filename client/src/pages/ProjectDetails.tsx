@@ -339,23 +339,13 @@ export const ProjectDetails: React.FC = () => {
         />
       </TabPanel>
 
-      {/* ── Tab 1: 3D Viewer ─────────────────────────────────── */}
+      {/* ── Tab 1: 3D Viewer & Volume Calculator ─────────────── */}
       <TabPanel value={activeTab} index={1}>
-        {(project.status === 'completed' || serverPlyPath) ? (
-          <>
-            <ThreeDViewer
-              pointCloudUrl={serverPlyPath}
-              onGeometryLoaded={setPointCloudGeo}
-            />
-            <VolumeCalculator geometry={pointCloudGeo} />
-          </>
-        ) : (
-          <EmptyPanel
-            icon={<ViewInArRoundedIcon sx={{ fontSize: 36, color: '#A7F3D0' }} />}
-            title="3D model not available"
-            subtitle="Upload a .ply point cloud via Admin Pipeline, or run WebODM alignment to generate outputs."
-          />
-        )}
+        <ThreeDViewer
+          pointCloudUrl={serverPlyPath}
+          onGeometryLoaded={setPointCloudGeo}
+        />
+        <VolumeCalculator geometry={pointCloudGeo} />
       </TabPanel>
 
       {/* ── Tab 2: Comparison Slider ─────────────────────────── */}
