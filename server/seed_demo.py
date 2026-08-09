@@ -103,6 +103,19 @@ def seed_demo_data():
         
         ply_rel_path = f"static/processed/project_{proj_id}/point_cloud.ply"
         
+        # Copy sample orthophoto PNG for Leaflet MapView overlay
+        out_dir = os.path.join(settings.PROCESSED_DIR, f"project_{proj_id}")
+        os.makedirs(out_dir, exist_ok=True)
+        src_ortho = os.path.abspath(os.path.join(os.getcwd(), "client", "public", "sample_orthophoto.png"))
+        dest_ortho = os.path.join(out_dir, "orthophoto.png")
+        if os.path.exists(src_ortho):
+            try:
+                import shutil
+                shutil.copy(src_ortho, dest_ortho)
+                print(f"[DEMO] Copied sample orthophoto to {dest_ortho}")
+            except Exception as e:
+                print(f"[DEMO WARN] Failed to copy demo orthophoto: {e}")
+
         ortho = db.query(models.Orthophoto).filter(models.Orthophoto.project_id == proj_id).first()
         if not ortho:
             ortho = models.Orthophoto(

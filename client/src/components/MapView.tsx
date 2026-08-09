@@ -50,10 +50,7 @@ export const MapView: React.FC<MapViewProps> = ({
     [latitude + offset, longitude + offset],
   ];
 
-  // Path to the static PNG generated for project 1, fallback to a placeholder/sample for other projects
-  const orthophotoUrl = projectId === 1 
-    ? `${API_URL}/static/processed/project_1/orthophoto.png`
-    : 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?q=80&w=600'; // Aerial solar farm mockup fallback
+  const orthophotoUrl = `${API_URL}/static/processed/project_${projectId}/orthophoto.png`;
 
   // Fetch saved measurements from API
   const fetchMeasurements = async () => {
