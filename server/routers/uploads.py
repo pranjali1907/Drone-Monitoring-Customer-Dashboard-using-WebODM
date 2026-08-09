@@ -9,7 +9,6 @@ from server.database import get_db
 from server.config import settings
 import server.models as models
 import server.schemas as schemas
-import server.auth as auth
 
 router = APIRouter(prefix="/api/uploads", tags=["Uploads"])
 
@@ -17,7 +16,6 @@ router = APIRouter(prefix="/api/uploads", tags=["Uploads"])
 def upload_drone_images(
     project_id: int, 
     files: List[UploadFile] = File(...), 
-    current_admin: Optional[models.User] = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -28,62 +26,38 @@ def upload_drone_images(
     os.makedirs(project_upload_dir, exist_ok=True)
 
     saved_images = []
-    try:
-        for file in files:
-            ext = os.path.splitext(file.filename)[1].lower()
-            if ext not in ['.jpg', '.jpeg', '.tif', '.tiff', '.png']:
-                continue
+    for file in files:
+        file_path = os.path.join(project_upload_dir, file.filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-            file_path = os.path.join(project_upload_dir, file.filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+        size = os.path.getsize(file_path)
 
-            size = os.path.getsize(file_path)
+        lat_offset = (len(saved_images) * 0.0001) if project.latitude else 0.0
+        lng_offset = (len(saved_images) * 0.0001) if project.longitude else 0.0
+        lat_val = (project.latitude or 0.0) + lat_offset
+        lng_val = (project.longitude or 0.0) + lng_offset
 
-            lat_offset = (len(saved_images) * 0.0001) if project.latitude else 0.0
-            lng_offset = (len(saved_images) * 0.0001) if project.longitude else 0.0
-            lat_val = (project.latitude or 0.0) + lat_offset
-            lng_val = (project.longitude or 0.0) + lng_offset
-
-            new_image = models.DroneImage(
-                project_id=project_id,
-                filename=file.filename,
-                filepath=f"static/uploads/project_{project_id}/{file.filename}",
-                filesize=size,
-                capture_time=datetime.datetime.utcnow() - datetime.timedelta(days=1),
-                latitude=lat_val,
-                longitude=lng_val,
-                altitude=120.0 + (len(saved_images) * 0.5)
-            )
-            db.add(new_image)
-            saved_images.append(new_image)
-
-        db.commit()
-        for img in saved_images:
-            try:
-                db.refresh(img)
-            except Exception:
-                pass
-    except Exception as img_err:
-        db.rollback()
-        print(f"[ERROR] upload_drone_images failed: {img_err}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process image upload: {str(img_err)}"
+        new_image = models.DroneImage(
+            project_id=project_id,
+            filename=file.filename,
+            filepath=f"static/uploads/project_{project_id}/{file.filename}",
+            filesize=size,
+            capture_time=datetime.datetime.utcnow(),
+            latitude=lat_val,
+            longitude=lng_val,
+            altitude=120.0 + (len(saved_images) * 0.5),
+            geom=f"{lng_val}, {lat_val}"
         )
+        db.add(new_image)
+        saved_images.append(new_image)
 
-    try:
-        log = models.ActivityLog(
-            user_id=current_admin.id if current_admin else None, 
-            action="UPLOAD_IMAGES", 
-            details=f"Uploaded {len(files)} raw drone images to project ID {project_id}"
-        )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
+    db.commit()
+    for img in saved_images:
+        try:
+            db.refresh(img)
+        except Exception:
+            pass
 
     return saved_images
 
@@ -91,19 +65,11 @@ def upload_drone_images(
 def upload_drone_video(
     project_id: int, 
     file: UploadFile = File(...), 
-    current_admin: Optional[models.User] = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in ['.mp4', '.mov', '.avi']:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported video format. Allowed: MP4, MOV, AVI"
-        )
 
     project_upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{project_id}")
     os.makedirs(project_upload_dir, exist_ok=True)
@@ -126,17 +92,6 @@ def upload_drone_video(
     db.commit()
     db.refresh(new_video)
 
-    try:
-        log = models.ActivityLog(
-            user_id=current_admin.id if current_admin else None,
-            action="UPLOAD_VIDEO",
-            details=f"Uploaded video {file.filename} to project ID {project_id}"
-        )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
-
     return new_video
 
 @router.post("/project/{project_id}/reports/{report_type}", response_model=schemas.ReportResponse)
@@ -145,24 +100,11 @@ def upload_project_report(
     report_type: str,
     title: str,
     file: UploadFile = File(...),
-    current_admin: Optional[models.User] = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    if report_type not in ['pdf', 'excel']:
-        raise HTTPException(status_code=400, detail="Invalid report type. Must be 'pdf' or 'excel'")
-
-    ext = os.path.splitext(file.filename)[1].lower()
-    allowed_exts = {
-        'pdf': ['.pdf'],
-        'excel': ['.xlsx', '.xls', '.csv']
-    }
-    
-    if ext not in allowed_exts.get(report_type, []):
-        raise HTTPException(status_code=400, detail=f"File extension mismatch for type {report_type}")
 
     reports_dir = os.path.join(settings.REPORTS_DIR, f"project_{project_id}")
     os.makedirs(reports_dir, exist_ok=True)
@@ -176,22 +118,11 @@ def upload_project_report(
         title=title,
         report_type=report_type,
         filepath=f"static/reports/project_{project_id}/{file.filename}",
-        created_by=current_admin.id if current_admin else None
+        created_by=1
     )
     db.add(new_report)
     db.commit()
     db.refresh(new_report)
-
-    try:
-        log = models.ActivityLog(
-            user_id=current_admin.id if current_admin else None, 
-            action="UPLOAD_REPORT", 
-            details=f"Uploaded report: {title} ({report_type}) to project ID {project_id}"
-        )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
 
     return new_report
 
@@ -199,19 +130,11 @@ def upload_project_report(
 def upload_point_cloud(
     project_id: int,
     file: UploadFile = File(...),
-    current_admin: Optional[models.User] = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext != ".ply":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only .ply files are supported for point cloud uploads.",
-        )
 
     project_processed_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
     os.makedirs(project_processed_dir, exist_ok=True)
@@ -240,23 +163,11 @@ def upload_point_cloud(
     db.commit()
     db.refresh(orthophoto)
 
-    try:
-        log = models.ActivityLog(
-            user_id=current_admin.id if current_admin else None,
-            action="UPLOAD_PLY",
-            details=f"Uploaded point cloud .ply for project ID {project_id}",
-        )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
-
     return {"message": "Point cloud uploaded successfully", "point_cloud_path": static_path}
 
 @router.delete("/project/{project_id}/ply")
 def delete_point_cloud(
     project_id: int,
-    current_admin: Optional[models.User] = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -286,16 +197,5 @@ def delete_point_cloud(
         if not has_other_outputs:
             project.status = "draft"
         db.commit()
-
-    try:
-        log = models.ActivityLog(
-            user_id=current_admin.id if current_admin else None,
-            action="DELETE_PLY",
-            details=f"Deleted point cloud .ply for project ID {project_id}",
-        )
-        db.add(log)
-        db.commit()
-    except Exception:
-        pass
 
     return {"message": "Point cloud deleted successfully"}
