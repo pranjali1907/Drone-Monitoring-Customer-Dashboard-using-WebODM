@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppBar, Toolbar, Typography, Box, Avatar, Chip, IconButton, Badge, Tooltip } from '@mui/material';
+import { AppBar, Toolbar, Box, Avatar, Chip, IconButton, Badge, Tooltip } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import SearchIcon from '@mui/icons-material/Search';
@@ -18,37 +18,22 @@ export const Navbar: React.FC = () => {
       : 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)';
 
   return (
-    <AppBar position="fixed" elevation={0} sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
-      <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, sm: 3 }, minHeight: 64 }}>
+    <AppBar position="fixed" elevation={0} sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: '#FFFFFF', borderBottom: '1px solid #E2E8F0' }}>
+      <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, sm: 3 }, minHeight: 68 }}>
 
-        {/* ── Brand ─────────────────────────────────────────── */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {/* Eagle Infra India Ltd. Logo */}
+        {/* ── Official Eagle Logo ───────────────────────────── */}
+        <Box sx={{ display: 'flex', alignItems: 'center', py: 0.5 }}>
           <Box
             component="img"
             src="/eagle-logo.png"
             alt="Eagle Infra India Ltd."
             sx={{
-              height: 44,
+              height: 48,
               width: 'auto',
               objectFit: 'contain',
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.08))',
+              display: 'block',
             }}
           />
-          <Box sx={{ borderLeft: '1px solid #E2E8F0', pl: 1.5 }}>
-            <Typography
-              variant="h6"
-              sx={{
-                fontFamily: 'Outfit', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1,
-                color: '#0F172A', fontSize: '1rem',
-              }}
-            >
-              SkyeView
-            </Typography>
-            <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 500, lineHeight: 1, fontSize: '0.62rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Drone Platform
-            </Typography>
-          </Box>
         </Box>
 
         {/* ── Right Controls ────────────────────────────────── */}
@@ -86,12 +71,12 @@ export const Navbar: React.FC = () => {
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: 0.5 }}>
               <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A', lineHeight: 1.2, fontSize: '0.85rem' }}>
-                  {user.full_name || 'Administrator'}
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#94A3B8', fontSize: '0.72rem' }}>
+                <Box sx={{ fontWeight: 700, color: '#0F172A', lineHeight: 1.2, fontSize: '0.85rem' }}>
+                  {user.full_name || 'Eagle Administrator'}
+                </Box>
+                <Box sx={{ color: '#94A3B8', fontSize: '0.72rem' }}>
                   {user.email}
-                </Typography>
+                </Box>
               </Box>
               <Avatar
                 sx={{

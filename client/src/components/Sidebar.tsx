@@ -173,28 +173,20 @@ export const Sidebar: React.FC = () => {
           </Box>
         )}
 
-        {/* Bottom Brand Watermark */}
+        {/* Bottom Eagle Brand Badge */}
         <Box sx={{ mx: 2, mt: activeJobs.length > 0 ? 1 : 'auto', pt: 1 }}>
           <Box
             sx={{
-              p: 1.5, borderRadius: '12px', bgcolor: '#F8FAFC', border: '1px solid #E2E8F0',
-              display: 'flex', alignItems: 'center', gap: 1.5,
+              p: 1.5, borderRadius: '14px', bgcolor: '#FFFFFF', border: '1px solid #E2E8F0',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
             }}
           >
             <Box
               component="img"
               src="/eagle-logo.png"
               alt="Eagle Infra India Ltd."
-              sx={{ height: 36, width: 'auto', objectFit: 'contain' }}
+              sx={{ height: 38, width: 'auto', objectFit: 'contain' }}
             />
-            <Box>
-              <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#0F172A', fontFamily: 'Outfit', lineHeight: 1 }}>
-                Eagle Infra
-              </Typography>
-              <Typography sx={{ fontSize: '0.62rem', color: '#94A3B8', lineHeight: 1.3 }}>
-                India Ltd.
-              </Typography>
-            </Box>
           </Box>
         </Box>
       </Box>
