@@ -83,10 +83,7 @@ class DroneImage(Base):
     longitude = Column(Float, nullable=True)
     altitude = Column(Float, nullable=True)
 
-    if not is_sqlite and has_geoalchemy:
-        geom = Column(Geometry(geometry_type='POINT', srid=4326), nullable=True)
-    else:
-        geom = Column(String(255), nullable=True)  # Store simple coordinate pair string
+    geom = Column(String(255), nullable=True)
 
     uploaded_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
