@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Box, Typography, Paper, Slider, Chip, Grid, Tooltip,
-  TextField, InputAdornment, Button, Divider,
+  TextField, InputAdornment, Divider,
 } from '@mui/material';
 
 import StraightenRoundedIcon from '@mui/icons-material/StraightenRounded';
