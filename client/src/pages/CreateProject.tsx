@@ -63,10 +63,13 @@ export const CreateProject: React.FC = () => {
 
     try {
       const res = await axios.post('/api/projects', {
-        name, description, location,
-        latitude: lat, longitude: lng,
+        name: name.trim(),
+        description: description ? description.trim() : null,
+        location: location ? location.trim() : null,
+        latitude: Number(lat),
+        longitude: Number(lng),
         boundary: JSON.stringify(boundaryGeoJson),
-        survey_date: surveyDate,
+        survey_date: surveyDate ? surveyDate : null,
       });
       navigate(`/projects/${res.data.id}`);
     } catch (err: any) {

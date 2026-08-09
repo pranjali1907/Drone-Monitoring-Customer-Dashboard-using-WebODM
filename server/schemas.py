@@ -35,8 +35,8 @@ class ProjectBase(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     boundary: Optional[str] = None  # GeoJSON representation
-    survey_date: Optional[date] = None
-    completion_date: Optional[date] = None
+    survey_date: Optional[Any] = None
+    completion_date: Optional[Any] = None
 
 class ProjectCreate(ProjectBase):
     pass

@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 import json
+import datetime
+from datetime import date
 
 from server.database import get_db
 import server.models as models
@@ -20,6 +22,19 @@ def get_projects(current_user: models.User = Depends(auth.get_current_user), db:
 
 @router.post("", response_model=schemas.ProjectResponse)
 def create_project(project_in: schemas.ProjectCreate, current_admin: models.User = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+    survey_dt = None
+    if project_in.survey_date:
+        if isinstance(project_in.survey_date, date):
+            survey_dt = project_in.survey_date
+        elif isinstance(project_in.survey_date, str) and project_in.survey_date.strip():
+            s = project_in.survey_date.strip()
+            for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    survey_dt = datetime.datetime.strptime(s, fmt).date()
+                    break
+                except Exception:
+                    pass
+
     new_project = models.Project(
         name=project_in.name,
         description=project_in.description,
@@ -27,7 +42,7 @@ def create_project(project_in: schemas.ProjectCreate, current_admin: models.User
         latitude=project_in.latitude,
         longitude=project_in.longitude,
         boundary=project_in.boundary, # Stored as GeoJSON string or geometry
-        survey_date=project_in.survey_date,
+        survey_date=survey_dt,
         status="draft"
     )
     db.add(new_project)
