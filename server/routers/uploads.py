@@ -3,7 +3,7 @@ import shutil
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from server.database import get_db
 from server.config import settings
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/uploads", tags=["Uploads"])
 def upload_drone_images(
     project_id: int, 
     files: List[UploadFile] = File(...), 
-    current_admin: models.User = Depends(auth.get_current_admin), 
+    current_admin: Optional[models.User] = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -29,38 +29,23 @@ def upload_drone_images(
 
     saved_images = []
     for file in files:
-        # Check extensions
         ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in ['.jpg', '.jpeg', '.tif', '.tiff']:
+        if ext not in ['.jpg', '.jpeg', '.tif', '.tiff', '.png']:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type {file.filename}. Only JPG, JPEG, and TIFF are allowed."
+                detail=f"Unsupported file type {file.filename}. Only JPG, JPEG, PNG, and TIFF are allowed."
             )
 
         file_path = os.path.join(project_upload_dir, file.filename)
-        # Save file to disk
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Extract size
         size = os.path.getsize(file_path)
 
-        # Mock coordinates near project center
         lat_offset = (len(saved_images) * 0.0001) if project.latitude else 0.0
         lng_offset = (len(saved_images) * 0.0001) if project.longitude else 0.0
         lat_val = (project.latitude or 0.0) + lat_offset
         lng_val = (project.longitude or 0.0) + lng_offset
-
-        geom_val = None
-        if models.has_geoalchemy and not models.is_sqlite:
-            try:
-                from geoalchemy2.elements import WKTElement
-                geom_val = WKTElement(f"POINT({lng_val} {lat_val})", srid=4326)
-            except Exception as g_err:
-                print(f"[WARN] WKTElement point conversion notice: {g_err}")
-                geom_val = None
-        else:
-            geom_val = f"{lng_val}, {lat_val}"
 
         new_image = models.DroneImage(
             project_id=project_id,
@@ -80,7 +65,6 @@ def upload_drone_images(
     for img in saved_images:
         db.refresh(img)
 
-    # Log action safely
     try:
         log = models.ActivityLog(
             user_id=current_admin.id if current_admin else None, 
@@ -98,7 +82,7 @@ def upload_drone_images(
 def upload_drone_video(
     project_id: int, 
     file: UploadFile = File(...), 
-    current_admin: models.User = Depends(auth.get_current_admin), 
+    current_admin: Optional[models.User] = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -152,7 +136,7 @@ def upload_project_report(
     report_type: str,
     title: str,
     file: UploadFile = File(...),
-    current_admin: models.User = Depends(auth.get_current_admin),
+    current_admin: Optional[models.User] = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -206,10 +190,9 @@ def upload_project_report(
 def upload_point_cloud(
     project_id: int,
     file: UploadFile = File(...),
-    current_admin: models.User = Depends(auth.get_current_admin),
+    current_admin: Optional[models.User] = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Upload a .ply point cloud file and associate it with the project's Orthophoto record."""
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -221,7 +204,6 @@ def upload_point_cloud(
             detail="Only .ply files are supported for point cloud uploads.",
         )
 
-    # Save to processed/project_<id>/point_cloud.ply
     project_processed_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
     os.makedirs(project_processed_dir, exist_ok=True)
 
@@ -265,10 +247,9 @@ def upload_point_cloud(
 @router.delete("/project/{project_id}/ply")
 def delete_point_cloud(
     project_id: int,
-    current_admin: models.User = Depends(auth.get_current_admin),
+    current_admin: Optional[models.User] = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete the saved .ply point cloud file for a project and clear its database record."""
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
