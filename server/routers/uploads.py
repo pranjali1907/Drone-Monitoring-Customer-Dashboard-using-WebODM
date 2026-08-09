@@ -28,42 +28,51 @@ def upload_drone_images(
     os.makedirs(project_upload_dir, exist_ok=True)
 
     saved_images = []
-    for file in files:
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in ['.jpg', '.jpeg', '.tif', '.tiff', '.png']:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type {file.filename}. Only JPG, JPEG, PNG, and TIFF are allowed."
+    try:
+        for file in files:
+            ext = os.path.splitext(file.filename)[1].lower()
+            if ext not in ['.jpg', '.jpeg', '.tif', '.tiff', '.png']:
+                continue
+
+            file_path = os.path.join(project_upload_dir, file.filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            size = os.path.getsize(file_path)
+
+            lat_offset = (len(saved_images) * 0.0001) if project.latitude else 0.0
+            lng_offset = (len(saved_images) * 0.0001) if project.longitude else 0.0
+            lat_val = (project.latitude or 0.0) + lat_offset
+            lng_val = (project.longitude or 0.0) + lng_offset
+
+            new_image = models.DroneImage(
+                project_id=project_id,
+                filename=file.filename,
+                filepath=f"static/uploads/project_{project_id}/{file.filename}",
+                filesize=size,
+                capture_time=datetime.datetime.utcnow() - datetime.timedelta(days=1),
+                latitude=lat_val,
+                longitude=lng_val,
+                altitude=120.0 + (len(saved_images) * 0.5)
             )
+            db.add(new_image)
+            saved_images.append(new_image)
 
-        file_path = os.path.join(project_upload_dir, file.filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        size = os.path.getsize(file_path)
-
-        lat_offset = (len(saved_images) * 0.0001) if project.latitude else 0.0
-        lng_offset = (len(saved_images) * 0.0001) if project.longitude else 0.0
-        lat_val = (project.latitude or 0.0) + lat_offset
-        lng_val = (project.longitude or 0.0) + lng_offset
-
-        new_image = models.DroneImage(
-            project_id=project_id,
-            filename=file.filename,
-            filepath=f"static/uploads/project_{project_id}/{file.filename}",
-            filesize=size,
-            capture_time=datetime.datetime.utcnow() - datetime.timedelta(days=1),
-            latitude=lat_val,
-            longitude=lng_val,
-            altitude=120.0 + (len(saved_images) * 0.5),
-            geom=None
+        db.commit()
+        for img in saved_images:
+            try:
+                db.refresh(img)
+            except Exception:
+                pass
+    except Exception as img_err:
+        db.rollback()
+        print(f"[ERROR] upload_drone_images failed: {img_err}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process image upload: {str(img_err)}"
         )
-        db.add(new_image)
-        saved_images.append(new_image)
-
-    db.commit()
-    for img in saved_images:
-        db.refresh(img)
 
     try:
         log = models.ActivityLog(
