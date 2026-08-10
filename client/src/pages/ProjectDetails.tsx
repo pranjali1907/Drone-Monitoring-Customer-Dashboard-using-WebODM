@@ -355,6 +355,7 @@ export const ProjectDetails: React.FC = () => {
           longitude={project.longitude || -118.1622}
           boundaryGeoJson={project.boundary}
           hasOrthophoto={project.status === 'completed'}
+          orthophotoPath={project.orthophotos?.[0]?.orthophoto_path}
         />
       </TabPanel>
 

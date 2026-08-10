@@ -270,16 +270,6 @@ def run_simulated_processing(project_id: int, job_id: int, db_session_maker):
                 out_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
                 os.makedirs(out_dir, exist_ok=True)
                 
-                # Copy a sample PNG orthophoto for Leaflet map overlay
-                src_ortho = os.path.abspath(os.path.join(os.getcwd(), "client", "public", "sample_orthophoto.png"))
-                dest_ortho = os.path.join(out_dir, "orthophoto.png")
-                if os.path.exists(src_ortho):
-                    try:
-                        shutil.copy(src_ortho, dest_ortho)
-                        print(f"[SIMULATOR] Copied sample orthophoto to {dest_ortho}")
-                    except Exception as e:
-                        print(f"[WARN] Failed to copy sample orthophoto: {e}")
-                
                 # Create actual placeholder files
                 webodm_client.download_assets(str(project_id), job.webodm_task_id, out_dir)
                 

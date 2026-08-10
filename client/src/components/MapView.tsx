@@ -25,6 +25,7 @@ interface MapViewProps {
   longitude: number;
   boundaryGeoJson?: string;
   hasOrthophoto?: boolean;
+  orthophotoPath?: string;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -33,6 +34,7 @@ export const MapView: React.FC<MapViewProps> = ({
   longitude,
   boundaryGeoJson,
   hasOrthophoto = true,
+  orthophotoPath,
 }) => {
   const [mapType, setMapType] = useState<'streets' | 'satellite'>('satellite');
   const [opacity, setOpacity] = useState<number>(0.85);
@@ -50,7 +52,9 @@ export const MapView: React.FC<MapViewProps> = ({
     [latitude + offset, longitude + offset],
   ];
 
-  const orthophotoUrl = `${API_URL}/static/processed/project_${projectId}/orthophoto.png`;
+  const orthophotoUrl = orthophotoPath
+    ? `${API_URL}/${orthophotoPath}`
+    : `${API_URL}/static/processed/project_1/orthophoto.png`;
 
   // Fetch saved measurements from API
   const fetchMeasurements = async () => {
