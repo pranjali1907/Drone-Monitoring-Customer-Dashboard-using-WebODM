@@ -362,6 +362,7 @@ export const ProjectDetails: React.FC = () => {
       {/* ── Tab 1: 3D Viewer & Volume Calculator ─────────────── */}
       <TabPanel value={activeTab} index={1}>
         <ThreeDViewer
+          projectId={project.id}
           pointCloudUrl={serverPlyPath}
           onGeometryLoaded={setPointCloudGeo}
         />

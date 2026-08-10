@@ -70,79 +70,16 @@ def seed_demo_data():
             db.commit()
             db.refresh(admin)
 
-        # 2. Find or Create Demo Project
-        demo_proj = db.query(models.Project).filter(models.Project.name.like("%Eagle Highway%")).first()
-        if not demo_proj:
-            demo_proj = db.query(models.Project).first()
-            
-        if not demo_proj:
-            demo_proj = models.Project(
-                name="Eagle Highway & Bridge Survey - Solapur (Demo)",
-                description="Comprehensive 3D drone monitoring, earthwork cut-fill analysis, and high-res orthomap inspection.",
-                location="Solapur, Maharashtra",
-                latitude=17.6599,
-                longitude=75.9064,
-                status="completed",
-                survey_date=datetime.date.today() - datetime.timedelta(days=5),
-                completion_date=datetime.date.today() - datetime.timedelta(days=4)
-            )
-            db.add(demo_proj)
-            db.commit()
-            db.refresh(demo_proj)
-        else:
-            demo_proj.name = "Eagle Highway & Bridge Survey - Solapur (Demo)"
-            demo_proj.location = "Solapur, Maharashtra"
-            demo_proj.status = "completed"
-            db.commit()
-
-        proj_id = demo_proj.id
-        
-        # 3. Create PLY file on disk and associate orthophoto record
-        ply_disk_path = os.path.join(settings.PROCESSED_DIR, f"project_{proj_id}", "point_cloud.ply")
-        create_sample_ply_file(ply_disk_path)
-        
-        ply_rel_path = f"static/processed/project_{proj_id}/point_cloud.ply"
-        
-        ortho = db.query(models.Orthophoto).filter(models.Orthophoto.project_id == proj_id).first()
-        if not ortho:
-            ortho = models.Orthophoto(
-                project_id=proj_id,
-                webodm_task_id="demo-task-101",
-                orthophoto_path=f"static/processed/project_{proj_id}/orthophoto.tif",
-                point_cloud_path=ply_rel_path,
-                dsm_path=f"static/processed/project_{proj_id}/dsm.tif",
-                dtm_path=f"static/processed/project_{proj_id}/dtm.tif",
-                report_path=f"static/processed/project_{proj_id}/report.pdf"
-            )
-            db.add(ortho)
-        else:
-            ortho.point_cloud_path = ply_rel_path
-            
-        # 4. Ensure raw images exist in project
-        img_count = db.query(models.DroneImage).filter(models.DroneImage.project_id == proj_id).count()
-        if img_count < 2:
-            img1 = models.DroneImage(
-                project_id=proj_id,
-                filename="Phase_1_Pre_Construction.jpg",
-                filepath="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Aerial_view_of_Morro_Bay%2C_California_-_May_2013.jpg/1280px-Aerial_view_of_Morro_Bay%2C_California_-_May_2013.jpg",
-                filesize=1024 * 500,
-                latitude=demo_proj.latitude,
-                longitude=demo_proj.longitude
-            )
-            img2 = models.DroneImage(
-                project_id=proj_id,
-                filename="Phase_2_Post_Construction.jpg",
-                filepath="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Aerial_photograph_of_a_solar_farm.jpg/1280px-Aerial_photograph_of_a_solar_farm.jpg",
-                filesize=1024 * 600,
-                latitude=demo_proj.latitude + 0.001,
-                longitude=demo_proj.longitude + 0.001
-            )
-            db.add_all([img1, img2])
-
+        # 2. Find and delete the Demo Project to remove it from display
+        demo_projs = db.query(models.Project).filter(
+            (models.Project.name.like("%Eagle Highway%")) | (models.Project.name.like("%Solapur (Demo)%"))
+        ).all()
+        for demo_p in demo_projs:
+            db.delete(demo_p)
+            print(f"[DEMO] Removed Solapur demo project ID: {demo_p.id}")
         db.commit()
-        print(f"[DEMO] Demo project #{proj_id} setup complete!")
     except Exception as e:
-        print(f"[DEMO] Error setting up demo project: {e}")
+        print(f"[DEMO] Error removing demo project / seeding admin: {e}")
     finally:
         db.close()
 

@@ -171,3 +171,17 @@ def trigger_orphan_data_cleanup():
     from server.main import cleanup_orphaned_project_folders
     count = cleanup_orphaned_project_folders()
     return {"message": f"Successfully cleaned up {count} orphaned project data storage folders."}
+
+@router.get("/{project_id}/ply-files")
+def list_project_ply_files(project_id: int, db: Session = Depends(get_db)):
+    import os
+    from server.config import settings
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_processed_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
+    if not os.path.exists(project_processed_dir):
+        return []
+
+    return [f for f in os.listdir(project_processed_dir) if f.lower().endswith(".ply")]

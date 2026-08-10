@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Box, Typography, Paper, ToggleButtonGroup, ToggleButton, Stack, Slider, Button, Chip } from '@mui/material';
+import { Box, Typography, Paper, ToggleButtonGroup, ToggleButton, Stack, Slider, Button, Chip, Select, MenuItem, FormControl } from '@mui/material';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
+import axios from 'axios';
+import { API_URL } from '../context/AuthContext';
 
 import Grid3x3Icon from '@mui/icons-material/Grid3x3';
 import TerrainIcon from '@mui/icons-material/Terrain';
@@ -11,13 +13,14 @@ import CloudDownloadRoundedIcon from '@mui/icons-material/CloudDownloadRounded';
 import { PointCloudGeometry } from './VolumeCalculator';
 
 interface ThreeDViewerProps {
+  projectId: number;
   /** Optional URL to a server-saved .ply file — auto-loads on mount when provided */
   pointCloudUrl?: string;
   /** Called after geometry is parsed so the parent can run volume calculations */
   onGeometryLoaded?: (geo: PointCloudGeometry) => void;
 }
 
-export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl, onGeometryLoaded }) => {
+export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, pointCloudUrl, onGeometryLoaded }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [renderMode, setRenderMode] = useState<'points' | 'mesh'>('points');
   const [rotationSpeed, setRotationSpeed] = useState<number>(0.5);
@@ -27,11 +30,34 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl, onGeo
   const [serverLoading, setServerLoading] = useState(false);
   const [serverLoaded, setServerLoaded] = useState(false);
 
-  // ── Auto-load from server URL on mount ──────────────────────────────────
+  const [plyFiles, setPlyFiles] = useState<string[]>([]);
+  const [selectedPly, setSelectedPly] = useState<string>('');
+
+  // ── Fetch available PLY files list ──────────────────────────────────────
+  const fetchPlyFiles = async () => {
+    try {
+      const res = await axios.get(`/api/projects/${projectId}/ply-files`);
+      setPlyFiles(res.data);
+      if (res.data.length > 0) {
+        // Auto-select first matching file or default point_cloud.ply
+        const defaultPly = res.data.find((f: string) => f.toLowerCase() === 'point_cloud.ply') || res.data[0];
+        setSelectedPly(defaultPly);
+      }
+    } catch (err) {
+      console.warn('Failed to load PLY files list:', err);
+    }
+  };
+
   useEffect(() => {
-    if (!pointCloudUrl) return;
+    fetchPlyFiles();
+  }, [projectId]);
+
+  // ── Load selected PLY from server ──────────────────────────────────────
+  const loadPlyFile = (plyName: string) => {
+    if (!plyName) return;
     setServerLoading(true);
-    fetch(pointCloudUrl)
+    const url = `${API_URL}/static/processed/project_${projectId}/${plyName}`;
+    fetch(url)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
@@ -43,7 +69,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl, onGeo
         geometry.center();
         setLoadedGeometry(geometry);
         setServerLoaded(true);
-        setFileName('point_cloud.ply (server)');
+        setFileName(plyName);
         // Expose geometry to parent for volume calculation
         if (onGeometryLoaded) {
           geometry.computeBoundingBox();
@@ -61,7 +87,13 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl, onGeo
         console.warn('Could not load server PLY:', err);
       })
       .finally(() => setServerLoading(false));
-  }, [pointCloudUrl]);
+  };
+
+  useEffect(() => {
+    if (selectedPly) {
+      loadPlyFile(selectedPly);
+    }
+  }, [selectedPly, projectId]);
 
   // ── Local file upload handler ────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -308,10 +340,48 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl, onGeo
           )}
         </Box>
 
-        {/* Local .PLY Upload */}
+        {/* Dropdown list of PLY files from the Admin Pipeline */}
         <Box>
           <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Upload Local .PLY
+            Select Point Cloud (Admin Pipeline)
+          </Typography>
+          <FormControl size="small" fullWidth>
+            <Select
+              value={selectedPly}
+              onChange={(e) => {
+                setSelectedPly(e.target.value as string);
+                setFileName(e.target.value as string);
+              }}
+              displayEmpty
+              sx={{
+                borderRadius: '10px',
+                fontFamily: 'Outfit',
+                fontSize: '0.82rem',
+                bgcolor: '#FFFFFF',
+                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#A7F3D0' },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#10B981' },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#10B981' }
+              }}
+            >
+              {plyFiles.length === 0 ? (
+                <MenuItem disabled value="">
+                  <em>No PLY files uploaded yet</em>
+                </MenuItem>
+              ) : (
+                plyFiles.map((file) => (
+                  <MenuItem key={file} value={file} sx={{ fontSize: '0.82rem', fontFamily: 'Outfit' }}>
+                    {file}
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+          </FormControl>
+        </Box>
+
+        {/* Local .PLY Upload as a secondary backup option */}
+        <Box>
+          <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Or Load Local .PLY File
           </Typography>
           <Button
             variant="outlined"
@@ -324,7 +394,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ pointCloudUrl, onGeo
               '&:hover': { borderColor: '#10B981', bgcolor: 'rgba(16,185,129,0.06)' },
             }}
           >
-            Choose .PLY File
+            Choose Local file
             <input type="file" accept=".ply" hidden onChange={handleFileChange} />
           </Button>
           {fileName && (

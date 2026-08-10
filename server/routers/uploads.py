@@ -138,11 +138,12 @@ def upload_point_cloud(
     project_processed_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
     os.makedirs(project_processed_dir, exist_ok=True)
 
-    dest_path = os.path.join(project_processed_dir, "point_cloud.ply")
+    filename = file.filename
+    dest_path = os.path.join(project_processed_dir, filename)
     with open(dest_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    static_path = f"static/processed/project_{project_id}/point_cloud.ply"
+    static_path = f"static/processed/project_{project_id}/{filename}"
 
     orthophoto = (
         db.query(models.Orthophoto)
@@ -150,7 +151,9 @@ def upload_point_cloud(
         .first()
     )
     if orthophoto:
-        orthophoto.point_cloud_path = static_path
+        # Only set if not already set, so we don't accidentally overwrite current default
+        if not orthophoto.point_cloud_path:
+            orthophoto.point_cloud_path = static_path
     else:
         orthophoto = models.Orthophoto(
             project_id=project_id,
@@ -167,6 +170,7 @@ def upload_point_cloud(
 @router.delete("/project/{project_id}/ply")
 def delete_point_cloud(
     project_id: int,
+    filename: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -179,23 +183,32 @@ def delete_point_cloud(
         .first()
     )
 
-    ply_path = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}", "point_cloud.ply")
+    target_filename = filename if filename else "point_cloud.ply"
+    ply_path = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}", target_filename)
     try:
         if os.path.exists(ply_path):
             os.remove(ply_path)
     except OSError as exc:
         print(f"[WARN] Could not remove ply file: {exc}")
 
-    if orthophoto:
-        orthophoto.point_cloud_path = None
-        has_other_outputs = any([
-            orthophoto.orthophoto_path,
-            orthophoto.dsm_path,
-            orthophoto.model_3d_path,
-        ])
-        if not has_other_outputs:
-            project.status = "draft"
-        db.commit()
+    if orthophoto and orthophoto.point_cloud_path:
+        current_name = os.path.basename(orthophoto.point_cloud_path)
+        if current_name == target_filename:
+            # Set another remaining .ply file as default if exists, else clear
+            project_processed_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
+            remaining_plys = [f for f in os.listdir(project_processed_dir) if f.lower().endswith(".ply")] if os.path.exists(project_processed_dir) else []
+            if remaining_plys:
+                orthophoto.point_cloud_path = f"static/processed/project_{project_id}/{remaining_plys[0]}"
+            else:
+                orthophoto.point_cloud_path = None
+                has_other_outputs = any([
+                    orthophoto.orthophoto_path,
+                    orthophoto.dsm_path,
+                    orthophoto.model_3d_path,
+                ])
+                if not has_other_outputs:
+                    project.status = "draft"
+            db.commit()
 
     return {"message": "Point cloud deleted successfully"}
 
