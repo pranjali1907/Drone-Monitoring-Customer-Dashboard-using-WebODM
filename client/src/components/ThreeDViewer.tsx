@@ -39,8 +39,9 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, pointClou
       const res = await axios.get(`/api/projects/${projectId}/ply-files`);
       setPlyFiles(res.data);
       if (res.data.length > 0) {
-        // Auto-select first matching file or default point_cloud.ply
-        const defaultPly = res.data.find((f: string) => f.toLowerCase() === 'point_cloud.ply') || res.data[0];
+        // If pointCloudUrl is provided, select its filename, otherwise fallback to first available
+        const urlFilename = pointCloudUrl ? pointCloudUrl.substring(pointCloudUrl.lastIndexOf('/') + 1) : null;
+        const defaultPly = res.data.find((f: string) => f === urlFilename) || res.data.find((f: string) => f.toLowerCase() === 'point_cloud.ply') || res.data[0];
         setSelectedPly(defaultPly);
       }
     } catch (err) {
