@@ -58,7 +58,6 @@ export const App: React.FC = () => (
           {/* /login redirects straight to dashboard — no login screen */}
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<DashboardLayout />} />
-          <Route path="compare" element={<SplitViewer />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
