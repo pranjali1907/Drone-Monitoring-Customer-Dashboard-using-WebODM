@@ -604,11 +604,10 @@ export const ProjectDetails: React.FC = () => {
           />
 
           {/* Upload Manager */}
-          <UploadManager
-            projectId={project.id}
-            onUploadSuccess={fetchProjectDetails}
+          <UploadManager 
+            projectId={project.id} 
             currentStatus={project.status}
-            existingPlyPath={serverPlyPath}
+            onUploadSuccess={fetchProjectDetails} 
           />
         </TabPanel>
       )}
