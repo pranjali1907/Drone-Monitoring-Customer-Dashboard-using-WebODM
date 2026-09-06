@@ -49,13 +49,13 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ onUploadSuccess })
           <StorageIcon sx={{ color: '#10B981' }} /> Processed Data Location (.ECW, etc.)
         </Typography>
         <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
-          Provide the local or network drive path (e.g., <strong>C:\Users\pranj\Downloads\Roha DPIA.ecw</strong>) where the processed drone data is stored. This eliminates the need for cloud upload and WebODM processing.
+          Provide the <strong>Google Drive</strong> link where the processed drone data (like .ecw files) is stored. Ensure the link access is set to allow reading so the dashboard can access the file directly.
         </Typography>
 
         <TextField
           fullWidth
           variant="outlined"
-          placeholder="e.g. C:\Users\pranj\Downloads\Roha DPIA.ecw"
+          placeholder="e.g. https://drive.google.com/file/d/..."
           value={dataLink}
           onChange={(e) => setDataLink(e.target.value)}
           sx={{ mb: 2, bgcolor: '#FFFFFF' }}
