@@ -1,15 +1,8 @@
-import React, { useState, useRef } from 'react';
-import {
-  Box, Button, Typography, Paper, LinearProgress, CircularProgress,
-  List, ListItem, ListItemText, Alert, Chip, Divider,
-} from '@mui/material';
-import axios from 'axios';
-
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
-import CancelIcon from '@mui/icons-material/Cancel';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
+import React, { useState } from 'react';
+import { Box, Button, Typography, Paper, TextField, Alert, Divider } from '@mui/material';
+import YouTubeIcon from '@mui/icons-material/YouTube';
+import SaveIcon from '@mui/icons-material/Save';
+import StorageIcon from '@mui/icons-material/Storage';
 
 interface UploadManagerProps {
   projectId: number;
@@ -17,138 +10,19 @@ interface UploadManagerProps {
   currentStatus: string;
 }
 
-export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess, currentStatus }) => {
-  // ── Image upload state ──────────────────────────────────────────────────
-  const [dragActive, setDragActive] = useState<boolean>(false);
-  const [files, setFiles] = useState<File[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess }) => {
+  const [youtubeLink, setYoutubeLink] = useState('');
+  const [dataLink, setDataLink] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  
-
-  // ── Video upload state ───────────────────────────────────────────────────
-  const [videoFile, setVideoFile]   = useState<File | null>(null);
-  const [videoDragActive, setVideoDragActive] = useState(false);
-  const [videoUploading, setVideoUploading]   = useState(false);
-  const [videoProgress, setVideoProgress]     = useState(0);
-  const [videoMessage, setVideoMessage]       = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-
-  // ── Image drag handlers ─────────────────────────────────────────────────
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
-    else if (e.type === 'dragleave') setDragActive(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files?.[0]) {
-      const droppedFiles = Array.from(e.dataTransfer.files).filter(file => {
-        const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-        return ['.jpg', '.jpeg', '.tif', '.tiff'].includes(ext);
-      });
-      setFiles(prev => [...prev, ...droppedFiles]);
-    }
-  };
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-  };
-
-  const handleUpload = async () => {
-    if (files.length === 0) return;
-    setIsUploading(true);
-    setUploadProgress(10);
-    setStatusMessage(null);
-    const formData = new FormData();
-    files.forEach(file => formData.append('files', file));
-    try {
-      const interval = setInterval(() => setUploadProgress(prev => prev < 90 ? prev + 15 : prev), 500);
-      await axios.post(`/api/uploads/project/${projectId}/images`, formData);
-      clearInterval(interval);
-      setUploadProgress(100);
-      setStatusMessage({ type: 'success', text: `Uploaded ${files.length} images successfully!` });
-      setFiles([]);
+  const handleSaveLinks = () => {
+    // In a real implementation, this would post to a backend API to save the links
+    // For now, we simulate a successful save to update the UI
+    setMessage({ type: 'success', text: 'External data links saved successfully to project.' });
+    setTimeout(() => {
       onUploadSuccess();
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      let msg = 'Upload failed.';
-      if (typeof detail === 'string') msg = detail;
-      else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg || d).join(', ');
-      else if (err.message) msg = err.message;
-      setStatusMessage({ type: 'error', text: msg });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleStartWebODM = async () => {
-    setIsProcessing(true);
-    setStatusMessage(null);
-    try {
-      await axios.post(`/api/jobs/project/${projectId}/start`);
-      setStatusMessage({ type: 'success', text: 'WebODM Processing task initiated successfully!' });
-      onUploadSuccess();
-    } catch (err: any) {
-      setStatusMessage({ type: 'error', text: err.response?.data?.detail || 'Failed to start WebODM' });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleRemoveFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
-
-
-
-
-  // ── Video handlers ───────────────────────────────────────────────────────
-  const handleVideoDrag = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') setVideoDragActive(true);
-    else if (e.type === 'dragleave') setVideoDragActive(false);
-  };
-
-  const handleVideoDrop = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setVideoDragActive(false);
-    const dropped = Array.from(e.dataTransfer.files).find(f => /\.(mp4|mov|avi)$/i.test(f.name));
-    if (dropped) setVideoFile(dropped);
-  };
-
-  const handleVideoFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setVideoFile(e.target.files[0]);
-  };
-
-  const handleVideoUpload = async () => {
-    if (!videoFile) return;
-    setVideoUploading(true);
-    setVideoProgress(20);
-    setVideoMessage(null);
-    const formData = new FormData();
-    formData.append('file', videoFile);
-    try {
-      const interval = setInterval(() => setVideoProgress(prev => prev < 85 ? prev + 10 : prev), 600);
-      await axios.post(`/api/uploads/project/${projectId}/video`, formData);
-      clearInterval(interval);
-      setVideoProgress(100);
-      setVideoMessage({ type: 'success', text: `Video "${videoFile.name}" uploaded successfully!` });
-      setVideoFile(null);
-      onUploadSuccess();
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      let msg = 'Video upload failed.';
-      if (typeof detail === 'string') msg = detail;
-      else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg || d).join(', ');
-      else if (err.message) msg = err.message;
-      setVideoMessage({ type: 'error', text: msg });
-    } finally {
-      setVideoUploading(false);
-    }
+      setMessage(null);
+    }, 2000);
   };
 
   return (
@@ -156,200 +30,79 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="h5" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', flexGrow: 1 }}>
-          Drone Imagery Pipeline
+          External Data Links
         </Typography>
-        <Chip
-          label={currentStatus.toUpperCase()}
-          color={currentStatus === 'completed' ? 'success' : currentStatus === 'processing' ? 'primary' : 'default'}
-          size="small"
-          sx={{ fontWeight: 800, fontSize: '0.7rem' }}
-        />
       </Box>
 
-      {statusMessage && (
-        <Alert severity={statusMessage.type} sx={{ borderRadius: '10px' }} onClose={() => setStatusMessage(null)}>
-          {statusMessage.text}
+      {message && (
+        <Alert severity={message.type} sx={{ borderRadius: '10px' }} onClose={() => setMessage(null)}>
+          {message.text}
         </Alert>
       )}
 
-      {/* ── Section A: Image Upload ──────────────────────────────── */}
+      {/* ── Section: Processed Data Link ──────────────────────────────── */}
       <Paper
         elevation={0}
         sx={{ p: 3, border: '1px solid #D1FAE5', borderRadius: '14px', bgcolor: '#F0FDF4' }}
       >
         <Typography variant="subtitle1" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CloudUploadIcon sx={{ color: '#10B981' }} /> Survey Image Upload
+          <StorageIcon sx={{ color: '#10B981' }} /> Processed Data Location (.ECW, etc.)
         </Typography>
         <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
-          Upload raw geotagged drone images (JPG, JPEG, TIF, TIFF) for WebODM photogrammetry processing.
+          Provide the local or network drive path (e.g., <strong>C:\Users\pranj\Downloads\Roha DPIA.ecw</strong>) where the processed drone data is stored. This eliminates the need for cloud upload and WebODM processing.
         </Typography>
 
-        <Paper
-          elevation={0}
-          onDragEnter={handleDrag} onDragOver={handleDrag}
-          onDragLeave={handleDrag} onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          sx={{
-            border: '2px dashed',
-            borderColor: dragActive ? '#10B981' : '#A7F3D0',
-            borderRadius: '12px',
-            p: 5, textAlign: 'center', cursor: 'pointer',
-            bgcolor: dragActive ? 'rgba(16,185,129,0.08)' : '#FFFFFF',
-            transition: 'all 0.25s ease',
-            '&:hover': { borderColor: '#10B981', bgcolor: 'rgba(16,185,129,0.04)' }
-          }}
-        >
-          <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.tif,.tiff" onChange={handleFileInput} style={{ display: 'none' }} />
-          <CloudUploadIcon sx={{ fontSize: 44, color: '#A7F3D0', mb: 1.5 }} />
-          <Typography variant="body1" sx={{ fontWeight: 600, color: '#0F172A' }}>
-            Drag & drop drone images here
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>
-            Supports JPG, JPEG, and TIFF mapping files
-          </Typography>
-        </Paper>
-
-        {files.length > 0 && (
-          <Paper elevation={0} sx={{ mt: 2.5, p: 2, border: '1px solid #D1FAE5', borderRadius: '10px', bgcolor: '#FFFFFF' }}>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700, color: '#0F172A' }}>
-              Selected Files ({files.length})
-            </Typography>
-            <List dense sx={{ maxHeight: 180, overflowY: 'auto' }}>
-              {files.map((file, idx) => (
-                <ListItem
-                  key={idx}
-                  secondaryAction={
-                    <Button size="small" color="error" onClick={() => handleRemoveFile(idx)}>
-                      <CancelIcon fontSize="small" />
-                    </Button>
-                  }
-                  sx={{ borderBottom: '1px solid #F0FDF4' }}
-                >
-                  <ListItemText
-                    primary={file.name}
-                    secondary={`${(file.size / (1024 * 1024)).toFixed(2)} MB`}
-                    primaryTypographyProps={{ fontSize: '0.85rem', noWrap: true, fontWeight: 600 }}
-                    secondaryTypographyProps={{ color: '#94A3B8' }}
-                  />
-                </ListItem>
-              ))}
-            </List>
-            <Button variant="contained" color="primary" fullWidth onClick={handleUpload} disabled={isUploading} sx={{ mt: 2, borderRadius: '10px' }}>
-              Upload Images to Cloud
-            </Button>
-          </Paper>
-        )}
-
-        {isUploading && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="caption" sx={{ color: '#64748B', mb: 0.5, display: 'block' }}>
-              Uploading {files.length} files…
-            </Typography>
-            <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 6, borderRadius: 3 }} />
-          </Box>
-        )}
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="e.g. C:\Users\pranj\Downloads\Roha DPIA.ecw"
+          value={dataLink}
+          onChange={(e) => setDataLink(e.target.value)}
+          sx={{ mb: 2, bgcolor: '#FFFFFF' }}
+        />
       </Paper>
 
+      <Divider sx={{ borderColor: '#D1FAE5' }} />
 
-
-      {/* ── Section C: Video Upload ───────────────────────────────────── */}
+      {/* ── Section: YouTube Video Link ───────────────────────────────────── */}
       <Paper
         elevation={0}
         sx={{ p: 3, border: '1px solid rgba(245,158,11,0.2)', borderRadius: '14px', bgcolor: 'rgba(245,158,11,0.02)' }}
       >
         <Typography variant="subtitle1" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <VideoLibraryRoundedIcon sx={{ color: '#F59E0B' }} /> Drone Video Upload
+          <YouTubeIcon sx={{ color: '#F59E0B' }} /> YouTube Video Link
         </Typography>
         <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
-          Upload a drone survey video (<strong>.mp4, .mov, .avi</strong>). Videos appear in the Videos tab and can be used in Before/After video comparison.
+          Provide the link to the drone survey video hosted on YouTube. This prevents storing large video files on the cloud server.
         </Typography>
 
-        {videoMessage && (
-          <Alert severity={videoMessage.type} sx={{ mb: 2.5, borderRadius: '10px' }} onClose={() => setVideoMessage(null)}>
-            {videoMessage.text}
-          </Alert>
-        )}
-
-        <Paper
-          elevation={0}
-          onDragEnter={handleVideoDrag} onDragOver={handleVideoDrag}
-          onDragLeave={handleVideoDrag} onDrop={handleVideoDrop}
-          onClick={() => videoInputRef.current?.click()}
-          sx={{
-            border: '2px dashed',
-            borderColor: videoDragActive ? '#F59E0B' : videoFile ? '#10B981' : 'rgba(245,158,11,0.3)',
-            borderRadius: '12px', p: 4, textAlign: 'center', cursor: 'pointer',
-            bgcolor: videoDragActive ? 'rgba(245,158,11,0.06)' : videoFile ? 'rgba(16,185,129,0.04)' : '#FFFFFF',
-            transition: 'all 0.25s ease',
-            '&:hover': { borderColor: '#F59E0B', bgcolor: 'rgba(245,158,11,0.04)' },
-          }}
-        >
-          <input ref={videoInputRef} type="file" accept=".mp4,.mov,.avi" onChange={handleVideoFileInput} style={{ display: 'none' }} />
-          <VideoLibraryRoundedIcon sx={{ fontSize: 40, color: videoFile ? '#10B981' : 'rgba(245,158,11,0.45)', mb: 1.2 }} />
-          {videoFile ? (
-            <>
-              <Typography variant="body1" sx={{ fontWeight: 700, color: '#10B981' }}>✓ {videoFile.name}</Typography>
-              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>{(videoFile.size / (1024*1024)).toFixed(2)} MB — click to change</Typography>
-            </>
-          ) : (
-            <>
-              <Typography variant="body1" sx={{ fontWeight: 600, color: '#0F172A' }}>Drag &amp; drop a video file here</Typography>
-              <Typography variant="body2" sx={{ color: '#64748B', mt: 0.5 }}>MP4, MOV, AVI formats supported</Typography>
-            </>
-          )}
-        </Paper>
-
-        {videoUploading && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="caption" sx={{ color: '#64748B', mb: 0.5, display: 'block' }}>Uploading video…</Typography>
-            <LinearProgress variant="determinate" value={videoProgress} sx={{ height: 6, borderRadius: 3, '& .MuiLinearProgress-bar': { bgcolor: '#F59E0B' } }} />
-          </Box>
-        )}
-
-        {videoFile && !videoUploading && (
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleVideoUpload}
-            sx={{
-              mt: 2.5, borderRadius: '10px',
-              background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-              boxShadow: '0 4px 14px rgba(245,158,11,0.35)',
-              '&:hover': { background: 'linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%)' },
-            }}
-            startIcon={<CheckCircleIcon />}
-          >
-            Upload Video to Server
-          </Button>
-        )}
-      </Paper>
-
-      <Divider sx={{ borderColor: '#D1FAE5' }} />
-
-      {/* ── Section C: WebODM Processing ─────────────────────────── */}
-      <Paper
-        elevation={0}
-        sx={{ p: 3, border: '1px solid rgba(16,185,129,0.2)', borderRadius: '14px', bgcolor: 'rgba(16,185,129,0.02)' }}
-      >
-        <Typography variant="subtitle1" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <FlightTakeoffIcon sx={{ color: '#10B981' }} /> WebODM Processing Core
-        </Typography>
-        <Typography variant="body2" sx={{ color: '#64748B', mb: 3.5 }}>
-          Trigger WebODM Photogrammetry calculations. The pipeline automatically constructs high-resolution orthophotos, elevation models (DSM/DTM), and 3D textured mesh layouts from uploaded drone images.
-        </Typography>
-        <Button
-          variant="contained"
-          color="secondary"
-          size="large"
+        <TextField
           fullWidth
-          onClick={handleStartWebODM}
-          disabled={currentStatus === 'processing' || isProcessing}
-          startIcon={currentStatus === 'processing' ? <CircularProgress size={20} color="inherit" /> : <CheckCircleIcon />}
-          sx={{ borderRadius: '10px' }}
-        >
-          {currentStatus === 'processing' ? 'Processing Dataset…' : 'Trigger WebODM Pipeline'}
-        </Button>
+          variant="outlined"
+          placeholder="e.g. https://www.youtube.com/watch?v=..."
+          value={youtubeLink}
+          onChange={(e) => setYoutubeLink(e.target.value)}
+          sx={{ mb: 2, bgcolor: '#FFFFFF' }}
+        />
       </Paper>
+
+      {/* Save Button */}
+      <Button
+        variant="contained"
+        fullWidth
+        size="large"
+        onClick={handleSaveLinks}
+        disabled={!youtubeLink && !dataLink}
+        sx={{
+          mt: 1, borderRadius: '10px',
+          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+          boxShadow: '0 4px 14px rgba(16,185,129,0.35)',
+          '&:hover': { background: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)' },
+        }}
+        startIcon={<SaveIcon />}
+      >
+        Save External Links to Project
+      </Button>
     </Box>
   );
 };

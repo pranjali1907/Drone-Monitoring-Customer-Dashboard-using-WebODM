@@ -21,19 +21,30 @@ export const Navbar: React.FC = () => {
     <AppBar position="fixed" elevation={0} sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: '#FFFFFF', borderBottom: '1px solid #E2E8F0' }}>
       <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, sm: 3 }, minHeight: 68 }}>
 
-        {/* ── Official Eagle Logo ───────────────────────────── */}
-        <Box sx={{ display: 'flex', alignItems: 'center', py: 0.5 }}>
+        {/* ── Official Eagle Logo & Name ───────────────────────────── */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 0.5 }}>
           <Box
             component="img"
             src="/eagle-logo.png"
             alt="Eagle Infra India Ltd."
             sx={{
-              height: 48,
+              height: 64, // Increased from 48
               width: 'auto',
               objectFit: 'contain',
               display: 'block',
             }}
           />
+          <Typography 
+            variant="h4" 
+            sx={{ 
+              fontFamily: "'Great Vibes', 'Brush Script MT', cursive", // Cursive fallback to match logo script
+              color: '#1A5F9F', // Standard blue to match the eagle logo
+              fontWeight: 600,
+              display: { xs: 'none', sm: 'block' }
+            }}
+          >
+            Eagle - Infra India Ltd
+          </Typography>
         </Box>
 
         {/* ── Right Controls ────────────────────────────────── */}
