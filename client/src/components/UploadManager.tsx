@@ -10,7 +10,7 @@ interface UploadManagerProps {
   currentStatus: string;
 }
 
-export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess }) => {
+export const UploadManager: React.FC<UploadManagerProps> = ({ onUploadSuccess }) => {
   const [youtubeLink, setYoutubeLink] = useState('');
   const [dataLink, setDataLink] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);

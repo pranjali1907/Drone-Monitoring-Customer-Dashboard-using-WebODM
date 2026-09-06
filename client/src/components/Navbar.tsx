@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppBar, Toolbar, Box, Avatar, Chip, IconButton, Badge, Tooltip } from '@mui/material';
+import { AppBar, Toolbar, Box, Avatar, Chip, IconButton, Badge, Tooltip, Typography } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import SearchIcon from '@mui/icons-material/Search';
