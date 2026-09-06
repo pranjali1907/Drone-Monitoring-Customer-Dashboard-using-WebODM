@@ -13,8 +13,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
 import { CreateProject } from './pages/CreateProject';
 import { ProjectDetails } from './pages/ProjectDetails';
+import { Settings } from './pages/Settings';
 import SplitViewer from './pages/SplitViewer';
-
 
 const drawerWidth = 248;
 
@@ -42,6 +42,7 @@ const DashboardLayout: React.FC = () => (
           <Route path="projects/:id"     element={<ProjectDetails />} />
           <Route path="projects/create"  element={<CreateProject />} />
           <Route path="settings"         element={<Settings />} />
+          <Route path="compare"          element={<SplitViewer />} />
           <Route path=""                 element={<Navigate to="dashboard" replace />} />
         </Routes>
       </Box>
