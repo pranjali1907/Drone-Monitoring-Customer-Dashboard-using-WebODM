@@ -69,9 +69,21 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, onGeometr
       const loaded: LoadedPly[] = [];
       let loadedCount = 0;
 
-      const loadPromises = plyFiles.map(async (plyName) => {
+      const loadPromises = plyFiles.map(async (plyNameOrUrl) => {
         try {
-          const url = `${API_URL}/static/processed/project_${projectId}/${plyName}`;
+          let url = '';
+          let displayName = plyNameOrUrl;
+          if (plyNameOrUrl.includes('drive.google.com')) {
+            const match = plyNameOrUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (match && match[1]) {
+              url = `/api/projects/proxy-drive?file_id=${match[1]}`;
+              displayName = 'Google Drive Model';
+            }
+          } else {
+            url = `${API_URL}/static/processed/project_${projectId}/${plyNameOrUrl}`;
+          }
+          if (!url) return;
+
           const r = await fetch(url);
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           const buffer = await r.arrayBuffer();
@@ -81,11 +93,9 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, onGeometr
           geometry.computeBoundingSphere();
           
           // DO NOT .center() here otherwise each tile centers independently and breaks relative coordinates!
-          // We preserve their original coordinate reference frames so they register correctly.
-          
-          loaded.push({ name: plyName, geometry });
+          loaded.push({ name: displayName, geometry });
         } catch (err) {
-          console.warn(`Could not load PLY ${plyName}:`, err);
+          console.warn(`Could not load PLY ${displayName}:`, err);
         } finally {
           loadedCount++;
           if (!isCancelled) setLoadingProgress(Math.round((loadedCount / plyFiles.length) * 100));

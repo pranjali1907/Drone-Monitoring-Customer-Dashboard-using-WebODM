@@ -180,8 +180,47 @@ def list_project_ply_files(project_id: int, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if project.description:
+        try:
+            import json
+            desc_data = json.loads(project.description)
+            data_link = desc_data.get("dataLink", "")
+            if "drive.google.com" in data_link:
+                return [data_link]
+        except Exception:
+            pass
+
     project_processed_dir = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}")
     if not os.path.exists(project_processed_dir):
         return []
 
     return [f for f in os.listdir(project_processed_dir) if f.lower().endswith(".ply")]
+
+import requests
+from fastapi.responses import StreamingResponse
+
+@router.get("/proxy-drive")
+def proxy_google_drive(file_id: str):
+    session = requests.Session()
+    # Initial request to get the confirm cookie for large files
+    download_url = f"https://drive.google.com/uc?id={file_id}&export=download"
+    response = session.get(download_url, stream=True)
+    
+    # Check for virus scan warning
+    token = None
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            token = value
+            break
+            
+    if token:
+        response = session.get(download_url, params={'confirm': token}, stream=True)
+        
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail="Failed to fetch from Google Drive")
+
+    return StreamingResponse(
+        response.iter_content(chunk_size=8192),
+        media_type=response.headers.get("content-type", "application/octet-stream")
+    )
+

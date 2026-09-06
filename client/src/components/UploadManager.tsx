@@ -3,6 +3,7 @@ import { Box, Button, Typography, Paper, TextField, Alert, Divider } from '@mui/
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import SaveIcon from '@mui/icons-material/Save';
 import StorageIcon from '@mui/icons-material/Storage';
+import axios from 'axios';
 
 interface UploadManagerProps {
   projectId: number;
@@ -10,19 +11,25 @@ interface UploadManagerProps {
   currentStatus: string;
 }
 
-export const UploadManager: React.FC<UploadManagerProps> = ({ onUploadSuccess }) => {
+export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess }) => {
   const [youtubeLink, setYoutubeLink] = useState('');
   const [dataLink, setDataLink] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleSaveLinks = () => {
-    // In a real implementation, this would post to a backend API to save the links
-    // For now, we simulate a successful save to update the UI
-    setMessage({ type: 'success', text: 'External data links saved successfully to project.' });
-    setTimeout(() => {
-      onUploadSuccess();
-      setMessage(null);
-    }, 2000);
+  const handleSaveLinks = async () => {
+    try {
+      const payload = {
+        description: JSON.stringify({ youtubeLink, dataLink })
+      };
+      await axios.put(`/api/projects/${projectId}`, payload);
+      setMessage({ type: 'success', text: 'External data links saved successfully to project.' });
+      setTimeout(() => {
+        onUploadSuccess();
+        setMessage(null);
+      }, 1500);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to save external links.' });
+    }
   };
 
   return (
