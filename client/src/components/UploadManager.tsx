@@ -9,19 +9,15 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded';
-import DeleteForeverRoundedIcon from '@mui/icons-material/DeleteForeverRounded';
 import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
 
 interface UploadManagerProps {
   projectId: number;
   onUploadSuccess: () => void;
   currentStatus: string;
-  /** Path of already-saved PLY on server, if any */
-  existingPlyPath?: string;
 }
 
-export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess, currentStatus, existingPlyPath }) => {
+export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess, currentStatus }) => {
   // ── Image upload state ──────────────────────────────────────────────────
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -109,17 +105,6 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
 
 
 
-  const handleDeletePly = async () => {
-    setPlyMessage(null);
-    try {
-      await axios.delete(`/api/uploads/project/${projectId}/ply`);
-      setPlyMessage({ type: 'success', text: 'Point cloud deleted. 3D Model tab will lock until a new .ply is uploaded.' });
-      setPlyFile(null);
-      onUploadSuccess();
-    } catch (err: any) {
-      setPlyMessage({ type: 'error', text: err.response?.data?.detail || 'Delete failed.' });
-    }
-  };
 
   // ── Video handlers ───────────────────────────────────────────────────────
   const handleVideoDrag = (e: React.DragEvent) => {
