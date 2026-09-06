@@ -70,9 +70,9 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, onGeometr
       let loadedCount = 0;
 
       const loadPromises = plyFiles.map(async (plyNameOrUrl) => {
+        let displayName = plyNameOrUrl;
         try {
           let url = '';
-          let displayName = plyNameOrUrl;
           if (plyNameOrUrl.includes('drive.google.com')) {
             const match = plyNameOrUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
             if (match && match[1]) {
