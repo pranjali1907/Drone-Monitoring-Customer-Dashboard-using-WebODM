@@ -29,13 +29,12 @@ const SplitViewer: React.FC = () => {
 
   // Load YouTube IFrame API once
   useEffect(() => {
-    if (window['YT']) return;
+    if ((window as any).YT) return;
     const tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
     const first = document.getElementsByTagName('script')[0];
     first.parentNode?.insertBefore(tag, first);
-    // @ts-ignore
-    window['onYouTubeIframeAPIReady'] = () => {};
+    (window as any).onYouTubeIframeAPIReady = () => {};
   }, []);
 
   // Initialise players when IDs are available
@@ -57,7 +56,7 @@ const SplitViewer: React.FC = () => {
 
     const createPlayer = (elementId: string, videoId: string, setRef: (p: any) => void, onReadyCb: () => void) => {
       const init = () => {
-        const player = new window['YT'].Player(elementId, {
+        const player = new (window as any).YT.Player(elementId, {
           videoId,
           playerVars: { autoplay: 0, controls: 0, modestbranding: 1, rel: 0, disablekb: 1, fs: 0 },
           events: { 
@@ -68,10 +67,10 @@ const SplitViewer: React.FC = () => {
           },
         });
       };
-      if (window['YT'] && window['YT'].Player) init();
+      if ((window as any).YT && (window as any).YT.Player) init();
       else {
         const intv = setInterval(() => {
-          if (window['YT'] && window['YT'].Player) {
+          if ((window as any).YT && (window as any).YT.Player) {
             clearInterval(intv);
             init();
           }
