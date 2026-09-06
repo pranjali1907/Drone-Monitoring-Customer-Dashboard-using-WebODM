@@ -31,13 +31,7 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── PLY upload state ────────────────────────────────────────────────────
-  const [plyFile, setPlyFile] = useState<File | null>(null);
-  const [plyDragActive, setPlyDragActive] = useState(false);
-  const [plyUploading, setPlyUploading] = useState(false);
-  const [plyProgress, setPlyProgress] = useState(0);
-  const [plyMessage, setPlyMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const plyInputRef = useRef<HTMLInputElement>(null);
+  
 
   // ── Video upload state ───────────────────────────────────────────────────
   const [videoFile, setVideoFile]   = useState<File | null>(null);
@@ -113,50 +107,7 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
 
   const handleRemoveFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
 
-  // ── PLY handlers ────────────────────────────────────────────────────────
-  const handlePlyDrag = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') setPlyDragActive(true);
-    else if (e.type === 'dragleave') setPlyDragActive(false);
-  };
 
-  const handlePlyDrop = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setPlyDragActive(false);
-    const dropped = Array.from(e.dataTransfer.files).find(f => f.name.toLowerCase().endsWith('.ply'));
-    if (dropped) setPlyFile(dropped);
-  };
-
-  const handlePlyFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setPlyFile(e.target.files[0]);
-  };
-
-  const handlePlyUpload = async () => {
-    if (!plyFile) return;
-    setPlyUploading(true);
-    setPlyProgress(20);
-    setPlyMessage(null);
-    const formData = new FormData();
-    formData.append('file', plyFile);
-    try {
-      const interval = setInterval(() => setPlyProgress(prev => prev < 85 ? prev + 15 : prev), 400);
-      await axios.post(`/api/uploads/project/${projectId}/ply`, formData);
-      clearInterval(interval);
-      setPlyProgress(100);
-      setPlyMessage({ type: 'success', text: `Point cloud "${plyFile.name}" uploaded! 3D Model tab is now unlocked.` });
-      setPlyFile(null);
-      onUploadSuccess(); // Reload project → unlocks 3D tab
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      let msg = 'PLY upload failed.';
-      if (typeof detail === 'string') msg = detail;
-      else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg || d).join(', ');
-      else if (err.message) msg = err.message;
-      setPlyMessage({ type: 'error', text: msg });
-    } finally {
-      setPlyUploading(false);
-    }
-  };
 
   const handleDeletePly = async () => {
     setPlyMessage(null);

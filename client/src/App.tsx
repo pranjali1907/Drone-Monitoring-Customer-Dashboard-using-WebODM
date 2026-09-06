@@ -13,7 +13,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
 import { CreateProject } from './pages/CreateProject';
 import { ProjectDetails } from './pages/ProjectDetails';
-import { Settings } from './pages/Settings';
+import SplitViewer from './pages/SplitViewer';
+
 
 const drawerWidth = 248;
 
@@ -57,7 +58,8 @@ export const App: React.FC = () => (
         <Routes>
           {/* /login redirects straight to dashboard — no login screen */}
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/*" element={<DashboardLayout />} />
+          <Route path="*" element={<DashboardLayout />} />
+          <Route path="compare" element={<SplitViewer />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
