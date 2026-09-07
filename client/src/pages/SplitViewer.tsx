@@ -279,7 +279,37 @@ const SplitViewer: React.FC = () => {
             <IconButton onClick={togglePlay} sx={{ color: '#fff', bgcolor: 'rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' } }}>
               {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
             </IconButton>
-          </Tooltip>
+            
+            <input 
+              type="range"
+              min="0"
+              max={duration.toString()}
+              step="0.1"
+              value={currentTime}
+              onChange={handleScrub}
+              style={{ flexGrow: 1, cursor: 'pointer' }}
+            />
+            
+            <Typography variant="caption" sx={{ color: '#aaa', minWidth: 45 }}>
+              {Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')}
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'center' }}>
+            <Typography variant="caption" sx={{ color: '#888' }}>Alignment Offset:</Typography>
+            <input 
+              type="range"
+              min="-2.0"
+              max="2.0"
+              step="0.05"
+              value={offset}
+              onChange={handleOffsetChange}
+              style={{ width: 120, cursor: 'pointer' }}
+            />
+            <Typography variant="caption" sx={{ color: '#fff', minWidth: 40 }}>
+              {offset > 0 ? '+' : ''}{offset.toFixed(2)}s
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </>
