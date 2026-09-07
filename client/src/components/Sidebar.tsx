@@ -11,6 +11,7 @@ import FolderOpenRoundedIcon from '@mui/icons-material/FolderOpenRounded';
 import AddBoxRoundedIcon from '@mui/icons-material/AddBoxRounded';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
+import CompareArrowsRoundedIcon from '@mui/icons-material/CompareArrowsRounded';
 
 const drawerWidth = 248;
 
@@ -25,6 +26,12 @@ export const Sidebar: React.FC = () => {
       items: [
         { text: 'Dashboard', icon: <DashboardRoundedIcon />, path: '/dashboard', color: '#6366F1' },
         { text: 'Map View', icon: <MapRoundedIcon />, path: '/projects', color: '#14B8A6' },
+      ],
+    },
+    {
+      label: 'Tools',
+      items: [
+        { text: 'Video Comparison', icon: <CompareArrowsRoundedIcon />, path: '/compare', color: '#EF4444' },
       ],
     },
     {
