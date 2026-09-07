@@ -112,5 +112,9 @@ class MeasurementResponse(BaseModel):
 class DashboardStats(BaseModel):
     total_projects: int
     active_projects: int
-    ready_layers: int
-    processing_layers: int
+    completed_projects: int = 0
+    ready_layers: int = 0
+    processing_layers: int = 0
+    storage_usage: int = 0
+    processing_status: List[dict] = []
+    latest_uploads: List[dict] = []

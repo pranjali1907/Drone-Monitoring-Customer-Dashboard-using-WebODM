@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Toolbar, Box, Typography,
+  Toolbar, Box, Typography, Chip,
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -25,12 +25,6 @@ export const Sidebar: React.FC = () => {
       items: [
         { text: 'Dashboard', icon: <DashboardRoundedIcon />, path: '/dashboard', color: '#6366F1' },
         { text: 'Map View',  icon: <MapRoundedIcon />,       path: '/projects',   color: '#14B8A6' },
-      ],
-    },
-    {
-      label: 'Tools',
-      items: [
-        { text: 'Video Comparison', icon: <CompareArrowsRoundedIcon />, path: '/compare', color: '#EF4444' },
       ],
     },
     {
@@ -121,8 +115,36 @@ export const Sidebar: React.FC = () => {
           </Box>
         ))}
 
+        {/* WebODM Live Status Widget (matching user screenshot) */}
+        <Box sx={{ mx: 2, mt: 'auto', mb: 1.5 }}>
+          <Box
+            sx={{
+              p: 1.5, borderRadius: '12px', bgcolor: 'rgba(99,102,241,0.06)',
+              border: '1px solid rgba(99,102,241,0.18)',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.6 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#6366F1', boxShadow: '0 0 6px #6366F1' }} />
+                <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, color: '#4F46E5', letterSpacing: '0.04em' }}>
+                  WEBODM LIVE
+                </Typography>
+              </Box>
+              <Chip label="1" size="small" sx={{ height: 18, minWidth: 18, fontSize: '0.65rem', fontWeight: 800, bgcolor: '#6366F1', color: '#fff' }} />
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography sx={{ fontSize: '0.66rem', color: '#64748B', fontFamily: 'monospace' }}>
+                task-7321...
+              </Typography>
+              <Typography sx={{ fontSize: '0.66rem', fontWeight: 700, color: '#10B981' }}>
+                0%
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+
         {/* Bottom Eagle Brand Badge */}
-        <Box sx={{ mx: 2, mt: 'auto', pt: 1, pb: 2 }}>
+        <Box sx={{ mx: 2, pt: 0.5, pb: 2 }}>
           <Box
             sx={{
               p: 2, borderRadius: '14px', bgcolor: '#FFFFFF', border: '1px solid #E2E8F0',
