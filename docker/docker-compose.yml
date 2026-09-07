@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. PostGIS Database
   db:
@@ -14,7 +12,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ../database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
 
   # 2. FastAPI Backend
   backend:
@@ -25,17 +22,11 @@ services:
     restart: always
     environment:
       - DATABASE_URL=postgresql://postgres:dronepassword_secure_99@db:5432/drone_monitoring
-      - WEBODM_URL=http://webodm:8000
-      - WEBODM_USERNAME=admin
-      - WEBODM_PASSWORD=admin
-      - WEBODM_MOCK_MODE=True  # Toggle to False to connect to a real WebODM instance
       - SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
     ports:
       - "8000:8000"
     volumes:
-      - uploads_data:/app/uploads
-      - processed_data:/app/processed
-      - reports_data:/app/reports
+      - tiles_data:/var/www/tiles
     depends_on:
       - db
 
@@ -48,19 +39,11 @@ services:
     restart: always
     ports:
       - "80:80"
+    volumes:
+      - tiles_data:/var/www/tiles:ro
     depends_on:
       - backend
 
-  # 4. Local WebODM Node (Simulating Processing Cluster)
-  webodm:
-    image: opendronemap/nodeodm:latest
-    container_name: webodm_node
-    restart: always
-    ports:
-      - "3000:3000"
-
 volumes:
   pgdata:
-  uploads_data:
-  processed_data:
-  reports_data:
+  tiles_data:

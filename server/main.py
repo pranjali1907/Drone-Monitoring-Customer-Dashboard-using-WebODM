@@ -1,10 +1,8 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from typing import Dict, List
-import datetime
 
 from server.config import settings
 from server.database import engine, Base, get_db
@@ -12,150 +10,71 @@ import server.models as models
 import server.schemas as schemas
 import server.auth as auth
 
-# Import Routers
 from server.routers import auth as auth_router
 from server.routers import projects as projects_router
-from server.routers import uploads as uploads_router
-from server.routers import webodm_jobs as jobs_router
+from server.seed_demo import seed_admin
 
-# Initialize database tables
+# ── Create all DB tables ──────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
 
-# Ensure schema alignment for drone_images table on PostgreSQL
-try:
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        conn.execute(text("ALTER TABLE drone_images DROP COLUMN IF EXISTS geom;"))
-        conn.commit()
-except Exception as _schema_err:
-    print(f"[WARN] Schema alignment notice: {_schema_err}")
-
+# ── FastAPI app ───────────────────────────────────────────────────────────
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="Backend API server for Cloud-Based Drone Monitoring & Customer Dashboard",
-    version="1.0.0"
+    description="Production API for Eagle - Infra India Ltd Drone Monitoring Dashboard",
+    version="2.0.0",
 )
 
-# CORS Setup
+# CORS — allow all for now (tighten in production with specific origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production security
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create folders if not exists
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-os.makedirs(settings.PROCESSED_DIR, exist_ok=True)
-os.makedirs(settings.REPORTS_DIR, exist_ok=True)
+# ── Static: GDAL tiles directory ──────────────────────────────────────────
+os.makedirs(settings.TILES_DIR, exist_ok=True)
+app.mount("/tiles", StaticFiles(directory=settings.TILES_DIR), name="tiles")
 
-import shutil
-def cleanup_orphaned_project_folders():
-    """Find and delete storage folders for projects that no longer exist in the database."""
-    try:
-        from server.database import SessionLocal
-        db = SessionLocal()
-        try:
-            active_ids = {p.id for p in db.query(models.Project.id).all()}
-        finally:
-            db.close()
-
-        deleted_count = 0
-        for base_dir in [settings.UPLOAD_DIR, settings.PROCESSED_DIR, settings.REPORTS_DIR]:
-            if not os.path.exists(base_dir):
-                continue
-            for folder in os.listdir(base_dir):
-                if folder.startswith("project_"):
-                    try:
-                        proj_id = int(folder.replace("project_", ""))
-                        if proj_id not in active_ids:
-                            full_path = os.path.join(base_dir, folder)
-                            shutil.rmtree(full_path)
-                            print(f"[CLEANUP] Purged orphaned storage folder: {full_path}")
-                            deleted_count += 1
-                    except (ValueError, OSError) as e:
-                        pass
-        return deleted_count
-    except Exception as err:
-        print(f"[WARN] Orphaned storage cleanup notice: {err}")
-        return 0
-
-# Purge orphaned storage directories for deleted projects
-cleanup_orphaned_project_folders()
-
-# Mount static asset folders to serve files (orthophotos, videos, reports)
-app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
-app.mount("/static/processed", StaticFiles(directory=settings.PROCESSED_DIR), name="processed")
-app.mount("/static/reports", StaticFiles(directory=settings.REPORTS_DIR), name="reports")
-
-# Register Routers
+# ── Routers ───────────────────────────────────────────────────────────────
 app.include_router(auth_router.router)
 app.include_router(projects_router.router)
-app.include_router(uploads_router.router)
-app.include_router(jobs_router.router)
 
-from server.seed_demo import seed_demo_data
 
-# Database seeding
+# ── Startup: seed admin ───────────────────────────────────────────────────
 @app.on_event("startup")
-def seed_database():
-    try:
-        seed_demo_data()
-    except Exception as e:
-        print(f"[SEED] Startup error: {e}")
+def on_startup():
+    seed_admin()
 
-# Dashboard Stats Endpoint
+
+# ── Dashboard stats ───────────────────────────────────────────────────────
 @app.get("/api/dashboard/stats", response_model=schemas.DashboardStats)
-def get_dashboard_stats(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+def get_dashboard_stats(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
     if current_user.role == "admin":
         projects = db.query(models.Project).all()
-        jobs = db.query(models.ProcessingJob).all()
-        logs = db.query(models.ActivityLog).order_by(models.ActivityLog.created_at.desc()).limit(5).all()
     else:
         projects = current_user.assigned_projects
-        proj_ids = [p.id for p in projects]
-        jobs = db.query(models.ProcessingJob).filter(models.ProcessingJob.project_id.in_(proj_ids)).all() if proj_ids else []
-        logs = db.query(models.ActivityLog).filter(models.ActivityLog.user_id == current_user.id).order_by(models.ActivityLog.created_at.desc()).limit(5).all()
 
-    total_projects = len(projects)
-    active_projects = sum(1 for p in projects if p.status in ["processing", "draft"])
-    completed_projects = sum(1 for p in projects if p.status == "completed")
-    
-    processing_status = []
-    for j in jobs:
-        processing_status.append({
-            "task_id": j.webodm_task_id,
-            "project_id": j.project_id,
-            "status": j.status,
-            "progress": j.progress
-        })
-
-    # Storage Usage calculation (sizes of uploads, processed, and reports)
-    storage_usage = 0
-    for folder in [settings.UPLOAD_DIR, settings.PROCESSED_DIR, settings.REPORTS_DIR]:
-        if os.path.exists(folder):
-            for root, dirs, files in os.walk(folder):
-                for file in files:
-                    storage_usage += os.path.getsize(os.path.join(root, file))
-
-    latest_uploads = []
-    for log in logs:
-        latest_uploads.append({
-            "action": log.action,
-            "details": log.details,
-            "timestamp": log.created_at
-        })
+    proj_ids = [p.id for p in projects]
+    layers = (
+        db.query(models.ProjectLayer)
+        .filter(models.ProjectLayer.project_id.in_(proj_ids))
+        .all()
+        if proj_ids else []
+    )
 
     return {
-        "total_projects": total_projects,
-        "active_projects": active_projects,
-        "completed_projects": completed_projects,
-        "processing_status": processing_status,
-        "storage_usage": storage_usage,
-        "latest_uploads": latest_uploads
+        "total_projects": len(projects),
+        "active_projects": sum(1 for p in projects if p.status == "active"),
+        "ready_layers": sum(1 for l in layers if l.status == "READY"),
+        "processing_layers": sum(1 for l in layers if l.status in ("PENDING", "PROCESSING")),
     }
 
+
 @app.get("/")
-def read_root():
-    return {"message": "Welcome to Drone Monitoring Platform REST API. Access Swagger docs at /docs"}
+def root():
+    return {"message": "Eagle - Infra India Ltd | Drone Monitoring API v2.0"}

@@ -1,201 +1,95 @@
 import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, Float, Date, DateTime, 
-    ForeignKey, Table, UniqueConstraint, Boolean
+    Column, Integer, String, Text, Float, Date, DateTime,
+    ForeignKey, Table, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
-from server.database import Base, is_sqlite
+from server.database import Base
 
-# Conditional import/support for GeoAlchemy2 if PostGIS is used
-try:
-    from geoalchemy2 import Geometry
-    has_geoalchemy = True
-except ImportError:
-    has_geoalchemy = False
-
-# Association table for Client-Project assignments
+# ── Many-to-many: Users ↔ Projects ─────────────────────────────────────
 client_assignments = Table(
-    'client_assignments',
+    "client_assignments",
     Base.metadata,
-    Column('id', Integer, primary_key=True, index=True),
-    Column('project_id', Integer, ForeignKey('projects.id', ondelete='CASCADE')),
-    Column('client_id', Integer, ForeignKey('users.id', ondelete='CASCADE')),
-    Column('assigned_at', DateTime(timezone=True), default=datetime.datetime.utcnow),
-    UniqueConstraint('project_id', 'client_id', name='uq_project_client')
+    Column("user_id",    Integer, ForeignKey("users.id",    ondelete="CASCADE"), primary_key=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
+    Column("assigned_at", DateTime(timezone=True), default=datetime.datetime.utcnow),
 )
+
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, index=True, nullable=False)
+    id              = Column(Integer, primary_key=True, index=True)
+    email           = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(255), nullable=False)
-    role = Column(String(50), nullable=False)  # 'admin' or 'client'
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    full_name       = Column(String(255), nullable=False)
+    role            = Column(String(50),  nullable=False, default="client")  # 'admin' | 'client'
+    created_at      = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
-    # Relationships
-    assigned_projects = relationship("Project", secondary=client_assignments, back_populates="assigned_clients")
+    assigned_projects = relationship(
+        "Project", secondary=client_assignments, back_populates="assigned_clients"
+    )
     measurements = relationship("Measurement", back_populates="user", cascade="all, delete-orphan")
-    activity_logs = relationship("ActivityLog", back_populates="user")
+
 
 class Project(Base):
     __tablename__ = "projects"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
-    description = Column(Text, nullable=True)
-    location = Column(String(255), nullable=True)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
-    survey_date = Column(Date, nullable=True)
-    completion_date = Column(Date, nullable=True)
-    status = Column(String(50), default="draft")  # 'draft', 'processing', 'completed', 'failed'
+    id               = Column(Integer, primary_key=True, index=True)
+    name             = Column(String(255), nullable=False)
+    description      = Column(Text,       nullable=True)
+    location         = Column(String(255), nullable=True)
+    survey_date      = Column(Date,        nullable=True)
+    latitude         = Column(Float,       nullable=True)
+    longitude        = Column(Float,       nullable=True)
+    # PostGIS boundary stored as WKT text (compatible without GeoAlchemy2)
+    boundary_wkt     = Column(Text,        nullable=True)
+    # YouTube IDs for split-screen comparison
     youtube_before_id = Column(String(100), nullable=True)
-    youtube_after_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    youtube_after_id  = Column(String(100), nullable=True)
+    # Processing status of this project overall
+    status           = Column(String(50), default="active")  # 'active' | 'archived'
+    created_at       = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at       = Column(DateTime(timezone=True), default=datetime.datetime.utcnow,
+                              onupdate=datetime.datetime.utcnow)
 
-    # Spatial column fallback
-    if not is_sqlite and has_geoalchemy:
-        boundary = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=True)
-    else:
-        boundary = Column(Text, nullable=True)  # Store GeoJSON string in SQLite
+    assigned_clients = relationship(
+        "User", secondary=client_assignments, back_populates="assigned_projects"
+    )
+    layers       = relationship("ProjectLayer", back_populates="project", cascade="all, delete-orphan")
+    measurements = relationship("Measurement",  back_populates="project", cascade="all, delete-orphan")
 
-    # Relationships
-    assigned_clients = relationship("User", secondary=client_assignments, back_populates="assigned_projects")
-    images = relationship("DroneImage", back_populates="project", cascade="all, delete-orphan")
-    videos = relationship("Video", back_populates="project", cascade="all, delete-orphan")
-    orthophotos = relationship("Orthophoto", back_populates="project", cascade="all, delete-orphan")
-    reports = relationship("Report", back_populates="project", cascade="all, delete-orphan")
-    processing_jobs = relationship("ProcessingJob", back_populates="project", cascade="all, delete-orphan")
-    layers = relationship("ProjectLayer", back_populates="project", cascade="all, delete-orphan")
-    measurements = relationship("Measurement", back_populates="project", cascade="all, delete-orphan")
 
 class ProjectLayer(Base):
+    """Tracks each raster or point-cloud asset linked to a project."""
     __tablename__ = "project_layers"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    layer_type = Column(String(50), nullable=False) # 'RASTER_TILES', 'POINT_CLOUD_PLY'
-    file_path_or_url = Column(Text, nullable=False)
-    label = Column(String(255), nullable=True)
-    status = Column(String(50), default="READY") # 'PENDING', 'PROCESSING', 'READY', 'FAILED'
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-    
-    # Relationships
+
+    id              = Column(Integer, primary_key=True, index=True)
+    project_id      = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name            = Column(String(255), nullable=False, default="Unnamed Layer")
+    layer_type      = Column(String(50),  nullable=False)   # 'RASTER_TILES' | 'POINT_CLOUD_PLY'
+    drive_file_id   = Column(String(255), nullable=True)    # Google Drive file ID
+    drive_url       = Column(Text,        nullable=True)    # Full Drive URL (store for display)
+    tile_url_pattern = Column(Text,       nullable=True)    # e.g. /tiles/{layer_id}/{z}/{x}/{y}.png
+    status          = Column(String(50),  nullable=False, default="PENDING")  # PENDING|PROCESSING|READY|FAILED
+    error_message   = Column(Text,        nullable=True)
+    created_at      = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
     project = relationship("Project", back_populates="layers")
 
-class DroneImage(Base):
-    __tablename__ = "drone_images"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    filename = Column(String(255), nullable=False)
-    filepath = Column(String(512), nullable=False)
-    filesize = Column(Integer, nullable=False)
-    capture_time = Column(DateTime(timezone=True), nullable=True)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
-    altitude = Column(Float, nullable=True)
-    uploaded_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-
-    # Relationships
-    project = relationship("Project", back_populates="images")
-
-class Video(Base):
-    __tablename__ = "videos"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    title = Column(String(255), nullable=False)
-    filename = Column(String(255), nullable=False)
-    filepath = Column(String(512), nullable=False)
-    filesize = Column(Integer, nullable=False)
-    duration = Column(Integer, nullable=True)  # in seconds
-    uploaded_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-
-    # Relationships
-    project = relationship("Project", back_populates="videos")
-
-class Orthophoto(Base):
-    __tablename__ = "orthophotos"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    webodm_task_id = Column(String(255), nullable=True)
-    orthophoto_path = Column(String(512), nullable=True)
-    dsm_path = Column(String(512), nullable=True)
-    dtm_path = Column(String(512), nullable=True)
-    point_cloud_path = Column(String(512), nullable=True)
-    model_3d_path = Column(String(512), nullable=True)
-    report_path = Column(String(512), nullable=True)
-    processed_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-
-    # Relationships
-    project = relationship("Project", back_populates="orthophotos")
-
-class Report(Base):
-    __tablename__ = "reports"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    title = Column(String(255), nullable=False)
-    report_type = Column(String(50), nullable=False)  # 'pdf', 'excel', 'webodm'
-    filepath = Column(String(512), nullable=False)
-    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-
-    # Relationships
-    project = relationship("Project", back_populates="reports")
-
-class ProcessingJob(Base):
-    __tablename__ = "processing_jobs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    webodm_task_id = Column(String(255), unique=True, nullable=False)
-    status = Column(String(50), nullable=False)  # 'queued', 'running', 'completed', 'failed', 'canceled'
-    progress = Column(Float, default=0.0)
-    logs = Column(Text, nullable=True)
-    started_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-
-    # Relationships
-    project = relationship("Project", back_populates="processing_jobs")
 
 class Measurement(Base):
+    """User-drawn 2D annotations on the map (distance or area)."""
     __tablename__ = "measurements"
 
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    name = Column(String(255), nullable=False)
-    measurement_type = Column(String(50), nullable=False)  # 'distance', 'area', 'coordinate', 'elevation'
-    
-    if not is_sqlite and has_geoalchemy:
-        geom = Column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
-    else:
-        geom = Column(Text, nullable=False)  # GeoJSON string fallback
+    id               = Column(Integer, primary_key=True, index=True)
+    project_id       = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id          = Column(Integer, ForeignKey("users.id",    ondelete="SET NULL"), nullable=True)
+    name             = Column(String(255), nullable=True)
+    measurement_type = Column(String(50),  nullable=False)   # 'distance' | 'area'
+    value            = Column(Float,       nullable=False)   # meters or sq meters
+    geom_geojson     = Column(Text,        nullable=True)    # GeoJSON string
+    created_at       = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
-    value = Column(Float, nullable=False)  # distance in m, area in m2
-    notes = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-
-    # Relationships
-    project = relationship("Project", back_populates="measurements")
-    user = relationship("User", back_populates="measurements")
-
-class ActivityLog(Base):
-    __tablename__ = "activity_logs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    action = Column(String(255), nullable=False)
-    details = Column(Text, nullable=True)
-    ip_address = Column(String(45), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-
-    # Relationships
-    user = relationship("User", back_populates="activity_logs")
+    project = relationship("Project",     back_populates="measurements")
+    user    = relationship("User",        back_populates="measurements")

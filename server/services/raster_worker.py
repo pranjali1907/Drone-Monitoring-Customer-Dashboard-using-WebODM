@@ -1,61 +1,99 @@
 import os
 import subprocess
+import logging
+
 from server.database import SessionLocal
 from server.models import ProjectLayer
+from server.services.drive_loader import stream_drive_file
 
-def process_raster_background(layer_id: int, input_file: str, project_id: int):
-    # This runs in a background task
+logger = logging.getLogger(__name__)
+
+
+def process_raster_layer(layer_id: int) -> None:
+    """
+    Background task:
+      1. Download raw raster from Google Drive.
+      2. Reproject to EPSG:3857 via gdalwarp.
+      3. Generate XYZ pyramid tiles via gdal2tiles.py.
+      4. Update ProjectLayer status to READY or FAILED.
+    """
     db = SessionLocal()
-    layer = db.query(ProjectLayer).filter(ProjectLayer.id == layer_id).first()
-    if not layer:
-        db.close()
-        return
-
     try:
+        layer: ProjectLayer = db.query(ProjectLayer).filter(ProjectLayer.id == layer_id).first()
+        if not layer:
+            logger.error(f"[RASTER] Layer {layer_id} not found.")
+            return
+
+        # ── Mark as PROCESSING ────────────────────────────────────────────
         layer.status = "PROCESSING"
         db.commit()
 
-        # Generate paths
-        output_dir = f"/app/server/static/projects/{project_id}/tiles"
-        os.makedirs(output_dir, exist_ok=True)
-        
-        warped_file = f"/app/server/static/projects/{project_id}/warped_{layer_id}.tif"
+        tiles_dir = f"/var/www/tiles/{layer_id}"
+        os.makedirs(tiles_dir, exist_ok=True)
 
-        # 1. Reproject to Web Mercator (EPSG:3857)
-        # Assuming the input might not be 3857. gdalwarp will detect source automatically if embedded.
+        raw_path    = f"/tmp/raw_{layer_id}"
+        warped_path = f"/tmp/warped_{layer_id}.tif"
+
+        # ── Step 1: Download from Google Drive ────────────────────────────
+        logger.info(f"[RASTER] Downloading drive file {layer.drive_file_id} ...")
+        stream_drive_file(layer.drive_file_id, raw_path)
+        logger.info(f"[RASTER] Download complete: {raw_path}")
+
+        # ── Step 2: Reproject to EPSG:3857 ───────────────────────────────
         warp_cmd = [
             "gdalwarp",
             "-t_srs", "EPSG:3857",
             "-r", "bilinear",
-            "-co", "COMPRESS=DEFLATE",
+            "-co", "COMPRESS=LZW",
             "-co", "TILED=YES",
-            input_file,
-            warped_file
+            "-of", "GTiff",
+            raw_path,
+            warped_path,
         ]
-        subprocess.run(warp_cmd, check=True)
+        logger.info(f"[RASTER] Running gdalwarp ...")
+        result = subprocess.run(warp_cmd, capture_output=True, text=True, timeout=3600)
+        if result.returncode != 0:
+            raise RuntimeError(f"gdalwarp failed: {result.stderr}")
+        logger.info(f"[RASTER] gdalwarp complete: {warped_path}")
 
-        # 2. Generate tiles (Zoom 14-21)
-        # Using gdal2tiles.py
-        tiles_cmd = [
+        # ── Step 3: Generate XYZ tiles ────────────────────────────────────
+        tile_cmd = [
             "gdal2tiles.py",
-            "-z", "14-21",
-            "-w", "leaflet",
-            warped_file,
-            output_dir
+            "--zoom=14-21",
+            "--processes=4",
+            "--xyz",
+            "--webviewer=none",
+            warped_path,
+            tiles_dir,
         ]
-        subprocess.run(tiles_cmd, check=True)
+        logger.info(f"[RASTER] Running gdal2tiles.py ...")
+        result = subprocess.run(tile_cmd, capture_output=True, text=True, timeout=7200)
+        if result.returncode != 0:
+            raise RuntimeError(f"gdal2tiles failed: {result.stderr}")
+        logger.info(f"[RASTER] Tiles generated at {tiles_dir}")
 
-        # Success
+        # ── Step 4: Mark READY ────────────────────────────────────────────
         layer.status = "READY"
+        layer.tile_url_pattern = f"/tiles/{layer_id}/{{z}}/{{x}}/{{y}}.png"
         db.commit()
+        logger.info(f"[RASTER] Layer {layer_id} is READY.")
 
-        # Clean up intermediate warped file
-        if os.path.exists(warped_file):
-            os.remove(warped_file)
-
-    except Exception as e:
-        print(f"Error processing raster: {e}")
-        layer.status = "FAILED"
-        db.commit()
+    except Exception as exc:
+        logger.exception(f"[RASTER] Layer {layer_id} FAILED: {exc}")
+        try:
+            db.query(ProjectLayer).filter(ProjectLayer.id == layer_id).update(
+                {"status": "FAILED", "error_message": str(exc)[:500]}
+            )
+            db.commit()
+        except Exception:
+            pass
     finally:
+        # Cleanup temp files
+        for path in [raw_path if 'raw_path' in dir() else None,
+                     warped_path if 'warped_path' in dir() else None]:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
         db.close()

@@ -1,247 +1,249 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Box, Button, TextField, Typography, Card, CardContent,
-  Grid, Stack, Alert, Chip, Divider
+  Box, Button, Typography, TextField, Paper, Alert,
+  Grid, Divider, Chip, CircularProgress, Stepper, Step, StepLabel,
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import YouTubeIcon from '@mui/icons-material/YouTube';
+import LayersIcon from '@mui/icons-material/Layers';
+import MapIcon from '@mui/icons-material/Map';
 
-import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
-import MyLocationRoundedIcon from '@mui/icons-material/MyLocationRounded';
-import MapRoundedIcon from '@mui/icons-material/MapRounded';
-import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
-import DriveFileRenameOutlineRoundedIcon from '@mui/icons-material/DriveFileRenameOutlineRounded';
-
-// Fix Leaflet default marker icon in Vite builds
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
+  iconSize: [25, 41], iconAnchor: [12, 41],
 });
+
+// Click-on-map helper
+const LocationPicker = ({ onPick }: { onPick: (lat: number, lng: number) => void }) => {
+  useMapEvents({ click(e) { onPick(e.latlng.lat, e.latlng.lng); } });
+  return null;
+};
 
 export const CreateProject: React.FC = () => {
   const navigate = useNavigate();
-  const [name, setName]             = useState('');
-  const [description, setDescription] = useState('');
-  const [location, setLocation]     = useState('');
-  const [lat, setLat]               = useState<number>(20.5937);
-  const [lng, setLng]               = useState<number>(78.9629);
-  const [surveyDate, setSurveyDate] = useState(new Date().toISOString().split('T')[0]);
-  const [error, setError]           = useState<string | null>(null);
-  const [loading, setLoading]       = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const [createdId, setCreatedId] = useState<number | null>(null);
 
-  // Map click handler
-  const MapEvents = () => {
-    useMapEvents({
-      click(e) {
-        setLat(parseFloat(e.latlng.lat.toFixed(6)));
-        setLng(parseFloat(e.latlng.lng.toFixed(6)));
-      },
-    });
-    return null;
+  // Form fields
+  const [name, setName]               = useState('');
+  const [description, setDescription] = useState('');
+  const [location, setLocation]       = useState('');
+  const [surveyDate, setSurveyDate]   = useState('');
+  const [lat, setLat]                 = useState<number>(19.9975);
+  const [lng, setLng]                 = useState<number>(73.8278);
+
+  // Google Drive links
+  const [rasterUrl, setRasterUrl]   = useState('');
+  const [plyUrls, setPlyUrls]       = useState('');   // newline-separated
+
+  // YouTube IDs
+  const [ytBefore, setYtBefore]     = useState('');
+  const [ytAfter, setYtAfter]       = useState('');
+
+  const handleMapPick = (pickedLat: number, pickedLng: number) => {
+    setLat(parseFloat(pickedLat.toFixed(6)));
+    setLng(parseFloat(pickedLng.toFixed(6)));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!name.trim()) { setError('Project name is required.'); return; }
-    setLoading(true);
-    setError(null);
-
-    const bounds = 0.001;
-    const boundaryGeoJson = {
-      type: 'Polygon',
-      coordinates: [[
-        [lng - bounds, lat - bounds],
-        [lng - bounds, lat + bounds],
-        [lng + bounds, lat + bounds],
-        [lng + bounds, lat - bounds],
-        [lng - bounds, lat - bounds],
-      ]],
-    };
-
+    setSaving(true);
+    setError('');
     try {
-      const res = await axios.post('/api/projects', {
-        name: name.trim(),
-        description: description ? description.trim() : null,
-        location: location ? location.trim() : null,
-        latitude: Number(lat),
-        longitude: Number(lng),
-        boundary: JSON.stringify(boundaryGeoJson),
-        survey_date: surveyDate ? surveyDate : null,
-      });
-      navigate(`/projects/${res.data.id}`);
+      const plyList = plyUrls
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const payload = {
+        name:               name.trim(),
+        description:        description.trim() || null,
+        location:           location.trim() || null,
+        survey_date:        surveyDate || null,
+        latitude:           lat,
+        longitude:          lng,
+        youtube_before_id:  ytBefore.trim() || null,
+        youtube_after_id:   ytAfter.trim() || null,
+        raster_drive_url:   rasterUrl.trim() || null,
+        ply_drive_urls:     plyList.length > 0 ? plyList : null,
+      };
+
+      const res = await axios.post('/api/projects', payload);
+      setCreatedId(res.data.id);
     } catch (err: any) {
-      let msg = 'Failed to create project. Please try again.';
-      if (typeof err.response?.data?.detail === 'string') {
-        msg = err.response.data.detail;
-      } else if (Array.isArray(err.response?.data?.detail)) {
-        msg = err.response.data.detail.map((d: any) => `${d.loc?.slice(-1)}: ${d.msg}`).join(' | ');
-      }
-      setError(msg);
+      setError(err?.response?.data?.detail || 'Failed to create project. Please try again.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  if (createdId) {
+    return (
+      <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+        <CheckCircleIcon sx={{ fontSize: 72, color: '#10B981' }} />
+        <Typography variant="h4" sx={{ fontFamily: 'Outfit', fontWeight: 700 }}>
+          Project Created!
+        </Typography>
+        <Typography color="text.secondary" textAlign="center">
+          Your project has been saved. If you provided a Google Drive raster link, GDAL processing
+          has started in the background — the 2D map tiles will appear automatically once ready.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button variant="contained" sx={{ bgcolor: '#10B981', '&:hover': { bgcolor: '#059669' } }}
+            onClick={() => navigate(`/projects/${createdId}`)}>
+            Open Project
+          </Button>
+          <Button variant="outlined" onClick={() => navigate('/projects')}>
+            All Projects
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
-    <Box className="page-enter" sx={{ py: 3.5, px: { xs: 2, md: 3 } }}>
+    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1100, mx: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 4 }}>
-        <Button
-          variant="outlined"
-          onClick={() => navigate('/projects')}
-          startIcon={<ArrowBackRoundedIcon />}
-          sx={{ borderRadius: '10px', borderColor: '#E2E8F0', color: '#475569', flexShrink: 0, mt: 0.5 }}
-        >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)} color="inherit">
           Back
         </Button>
         <Box>
-          <Typography variant="h4" sx={{ fontFamily: 'Outfit', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.03em', mb: 0.5 }}>
+          <Typography variant="h4" sx={{ fontFamily: 'Outfit', fontWeight: 800, color: '#0F172A' }}>
             Create New Project
           </Typography>
-          <Typography variant="body2" sx={{ color: '#64748B' }}>
-            Define a survey zone, set GPS coordinates on the map, and initialize the WebODM pipeline.
+          <Typography variant="body2" color="text.secondary">
+            Fill in the survey details, drop a pin on the map, and paste your Google Drive links.
           </Typography>
         </Box>
       </Box>
 
       {error && (
-        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3, borderRadius: '12px' }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <Grid container spacing={3}>
-          {/* Form Fields */}
-          <Grid item xs={12} lg={5}>
-            <Card>
-              <CardContent sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-                  <Box sx={{ width: 36, height: 36, borderRadius: '10px', bgcolor: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <DriveFileRenameOutlineRoundedIcon sx={{ fontSize: 18, color: '#6366F1' }} />
-                  </Box>
-                  <Typography sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A' }}>Project Details</Typography>
-                </Box>
+      <Grid container spacing={3}>
+        {/* ── Left column: metadata ── */}
+        <Grid item xs={12} md={6}>
 
-                <Stack spacing={2.5}>
-                  <TextField
-                    label="Project Name" required fullWidth
-                    value={name} onChange={e => setName(e.target.value)}
-                    placeholder="e.g. Solar Farm Survey Q3"
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#FAFAFA' } }}
-                  />
-                  <TextField
-                    label="Description" fullWidth multiline rows={3}
-                    value={description} onChange={e => setDescription(e.target.value)}
-                    placeholder="Describe the survey scope and objectives…"
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#FAFAFA' } }}
-                  />
-                  <TextField
-                    label="Region / Location Name" fullWidth
-                    value={location} onChange={e => setLocation(e.target.value)}
-                    placeholder="e.g. Rajasthan, India"
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#FAFAFA' } }}
-                  />
-                  <TextField
-                    label="Survey Date" type="date" required fullWidth
-                    value={surveyDate} onChange={e => setSurveyDate(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#FAFAFA' } }}
-                  />
+          {/* Project Details */}
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid #E2E8F0', mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <MapIcon sx={{ color: '#10B981' }} /> Project Details
+            </Typography>
 
-                  <Divider />
+            <TextField fullWidth label="Project Name *" value={name}
+              onChange={e => setName(e.target.value)} sx={{ mb: 2 }} />
+            <TextField fullWidth label="Description" multiline rows={3} value={description}
+              onChange={e => setDescription(e.target.value)} sx={{ mb: 2 }} />
+            <TextField fullWidth label="Region / Location Name" value={location}
+              onChange={e => setLocation(e.target.value)} sx={{ mb: 2 }} />
+            <TextField fullWidth label="Survey Date" type="date" value={surveyDate}
+              onChange={e => setSurveyDate(e.target.value)}
+              InputLabelProps={{ shrink: true }} />
+          </Paper>
 
-                  <Box>
-                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', mb: 1.5 }}>
-                      GPS Coordinates
-                    </Typography>
-                    <Grid container spacing={1.5}>
-                      <Grid item xs={6}>
-                        <TextField
-                          label="Latitude" type="number"
-                          inputProps={{ step: 'any' }} fullWidth size="small"
-                          value={lat} onChange={e => setLat(Number(e.target.value))}
-                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#FAFAFA' } }}
-                        />
-                      </Grid>
-                      <Grid item xs={6}>
-                        <TextField
-                          label="Longitude" type="number"
-                          inputProps={{ step: 'any' }} fullWidth size="small"
-                          value={lng} onChange={e => setLng(Number(e.target.value))}
-                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#FAFAFA' } }}
-                        />
-                      </Grid>
-                    </Grid>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                      <MyLocationRoundedIcon sx={{ fontSize: 14, color: '#94A3B8' }} />
-                      <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-                        Click on the map to set coordinates automatically
-                      </Typography>
-                    </Box>
-                  </Box>
+          {/* GPS Coordinates */}
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid #E2E8F0', mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+              GPS Coordinates
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+              Click anywhere on the map (right column) to auto-fill coordinates, or enter manually.
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <TextField fullWidth label="Latitude" type="number" value={lat}
+                  onChange={e => setLat(parseFloat(e.target.value))} />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField fullWidth label="Longitude" type="number" value={lng}
+                  onChange={e => setLng(parseFloat(e.target.value))} />
+              </Grid>
+            </Grid>
+          </Paper>
 
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    size="large"
-                    disabled={loading}
-                    startIcon={<SaveRoundedIcon />}
-                    fullWidth
-                    sx={{ py: 1.5, borderRadius: '12px', mt: 1 }}
-                  >
-                    {loading ? 'Creating…' : 'Create & Initialize Project'}
-                  </Button>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Map Section */}
-          <Grid item xs={12} lg={7}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Box sx={{ width: 36, height: 36, borderRadius: '10px', bgcolor: 'rgba(20,184,166,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <MapRoundedIcon sx={{ fontSize: 18, color: '#14B8A6' }} />
-                    </Box>
-                    <Typography sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A' }}>Select Survey Location</Typography>
-                  </Box>
-                  <Chip
-                    icon={<MyLocationRoundedIcon sx={{ fontSize: 14 }} />}
-                    label={`${lat.toFixed(4)}, ${lng.toFixed(4)}`}
-                    size="small"
-                    sx={{ bgcolor: 'rgba(99,102,241,0.08)', color: '#6366F1', fontWeight: 700, fontSize: '0.72rem' }}
-                  />
-                </Box>
-                <Typography variant="body2" sx={{ color: '#94A3B8', mt: -1 }}>
-                  Click anywhere on the map to set the project GPS coordinates. A boundary polygon will be generated automatically.
-                </Typography>
-
-                <Box sx={{ flexGrow: 1, minHeight: 400, borderRadius: '14px', overflow: 'hidden', border: '2px solid #E2E8F0' }}>
-                  <MapContainer
-                    center={[lat, lng]}
-                    zoom={5}
-                    scrollWheelZoom
-                    style={{ width: '100%', height: '100%', minHeight: 400 }}
-                  >
-                    <MapEvents />
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <Marker position={[lat, lng]} icon={markerIcon} />
-                  </MapContainer>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
+          {/* YouTube */}
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid rgba(245,158,11,0.3)', mb: 3, bgcolor: 'rgba(245,158,11,0.02)' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <YouTubeIcon sx={{ color: '#F59E0B' }} /> YouTube Video IDs
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+              Paste only the video ID (e.g. <code>dQw4w9WgXcQ</code>), not the full URL.
+            </Typography>
+            <TextField fullWidth label="Before Flight — YouTube Video ID" value={ytBefore}
+              onChange={e => setYtBefore(e.target.value)} sx={{ mb: 2 }} />
+            <TextField fullWidth label="After Flight — YouTube Video ID" value={ytAfter}
+              onChange={e => setYtAfter(e.target.value)} />
+          </Paper>
         </Grid>
-      </form>
+
+        {/* ── Right column: map + Drive links ── */}
+        <Grid item xs={12} md={6}>
+
+          {/* Map picker */}
+          <Paper elevation={0} sx={{ p: 0, borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden', mb: 3 }}>
+            <Box sx={{ p: 2, borderBottom: '1px solid #E2E8F0' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                Select Survey Location
+              </Typography>
+              <Chip label={`${lat}, ${lng}`} size="small" color="success" sx={{ mt: 0.5 }} />
+            </Box>
+            <MapContainer center={[lat, lng]} zoom={10} style={{ height: 280, width: '100%' }}>
+              <TileLayer
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                attribution="Esri"
+              />
+              <LocationPicker onPick={handleMapPick} />
+              <Marker position={[lat, lng]} icon={markerIcon} />
+            </MapContainer>
+          </Paper>
+
+          {/* Google Drive */}
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid #D1FAE5', bgcolor: '#F0FDF4', mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CloudUploadIcon sx={{ color: '#10B981' }} /> Google Drive Data Links
+            </Typography>
+
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              <strong>Raster Orthomosaic</strong> (.ECW / .TIF) — GDAL will reproject and tile automatically in the background.
+            </Typography>
+            <TextField fullWidth placeholder="https://drive.google.com/file/d/..." value={rasterUrl}
+              onChange={e => setRasterUrl(e.target.value)} sx={{ mb: 3, bgcolor: '#fff' }} />
+
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              <strong>Point Cloud PLY Files</strong> — one URL per line.
+            </Typography>
+            <TextField fullWidth multiline rows={3}
+              placeholder={"https://drive.google.com/file/d/...\nhttps://drive.google.com/file/d/..."}
+              value={plyUrls} onChange={e => setPlyUrls(e.target.value)} sx={{ bgcolor: '#fff' }} />
+          </Paper>
+
+          {/* Submit */}
+          <Button
+            fullWidth variant="contained" size="large"
+            disabled={saving || !name.trim()}
+            onClick={handleSubmit}
+            sx={{
+              py: 1.8, borderRadius: 2, fontFamily: 'Outfit', fontWeight: 700, fontSize: '1rem',
+              background: saving ? undefined : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+            }}
+            startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <CheckCircleIcon />}
+          >
+            {saving ? 'Creating Project…' : 'Create Project & Start Processing'}
+          </Button>
+        </Grid>
+      </Grid>
     </Box>
   );
 };

@@ -1,318 +1,250 @@
-// client/src/pages/SplitViewer.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Button, TextField, IconButton, Typography, Paper } from '@mui/material';
+import {
+  Box, Button, Slider, Typography, Paper, Stack, Chip,
+  TextField, Divider, IconButton, Tooltip,
+} from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import SyncIcon from '@mui/icons-material/Sync';
+import { useLocation } from 'react-router-dom';
 
-/** Extract YouTube video ID from URL or raw ID */
-const extractVideoId = (url: string): string | null => {
-  if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
-  const match = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})(?:[&#]|$)/);
-  return match ? match[1] : null;
-};
+declare global {
+  interface Window { YT: any; onYouTubeIframeAPIReady: () => void; }
+}
 
 const SplitViewer: React.FC = () => {
-  const [beforeInput, setBeforeInput] = useState('');
-  const [afterInput, setAfterInput] = useState('');
-  
-  const [beforeId, setBeforeId] = useState<string | null>(null);
-  const [afterId, setAfterId] = useState<string | null>(null);
-  
-  const beforePlayerRef = useRef<any>(null);
-  const afterPlayerRef = useRef<any>(null);
-  
-  const [offset, setOffset] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(100); // Safe default
+  const location = useLocation();
+  const params   = new URLSearchParams(location.search);
 
-  // Load YouTube IFrame API once
+  const [videoIdBefore, setVideoIdBefore] = useState(params.get('before') || '');
+  const [videoIdAfter,  setVideoIdAfter]  = useState(params.get('after')  || '');
+  const [started, setStarted]             = useState(false);
+  const [isPlaying, setIsPlaying]         = useState(false);
+  const [sliderVal, setSliderVal]         = useState(0);
+  const [duration,  setDuration]          = useState(0);
+  const [offset,    setOffset]            = useState(0);    // seconds, −5 to +5
+  const [driftInfo, setDriftInfo]         = useState('');
+  const [apiReady,  setApiReady]          = useState(false);
+
+  const playerBefore = useRef<any>(null);
+  const playerAfter  = useRef<any>(null);
+  const driftTimer   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seekTimer    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastSeek     = useRef(0);
+
+  // ── Load YouTube IFrame API ──────────────────────────────────────────
   useEffect(() => {
-    if ((window as any).YT) return;
+    if (window.YT && window.YT.Player) { setApiReady(true); return; }
     const tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
-    const first = document.getElementsByTagName('script')[0];
-    first.parentNode?.insertBefore(tag, first);
-    (window as any).onYouTubeIframeAPIReady = () => {};
+    document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady = () => setApiReady(true);
   }, []);
 
-  // Initialise players when IDs are available
-  useEffect(() => {
-    if (!beforeId || !afterId) return;
-    let isReady1 = false, isReady2 = false;
+  // ── Initialise players when Start clicked ───────────────────────────
+  const initPlayers = () => {
+    if (!apiReady || !videoIdBefore || !videoIdAfter) return;
 
-    const checkBothReady = () => {
-      if (isReady1 && isReady2) {
-        if (beforePlayerRef.current && afterPlayerRef.current) {
-          const d1 = beforePlayerRef.current.getDuration() || 0;
-          const d2 = afterPlayerRef.current.getDuration() || 0;
-          if (d1 > 0 && d2 > 0) {
-            setDuration(Math.min(d1, d2));
-          }
-        }
-      }
-    };
+    const commonVars = { autoplay: 0, controls: 0, modestbranding: 1, rel: 0, enablejsapi: 1 };
 
-    const createPlayer = (elementId: string, videoId: string, setRef: (p: any) => void, onReadyCb: () => void) => {
-      const init = () => {
-        const player = new (window as any).YT.Player(elementId, {
-          videoId,
-          playerVars: { autoplay: 0, controls: 0, modestbranding: 1, rel: 0, disablekb: 1, fs: 0 },
-          events: { 
-            onReady: () => {
-              setRef(player);
-              onReadyCb();
-            } 
-          },
-        });
-      };
-      if ((window as any).YT && (window as any).YT.Player) init();
-      else {
-        const intv = setInterval(() => {
-          if ((window as any).YT && (window as any).YT.Player) {
-            clearInterval(intv);
-            init();
-          }
-        }, 100);
-      }
-    };
-    
-    createPlayer('player-before', beforeId, (p) => { beforePlayerRef.current = p; }, () => { isReady1 = true; checkBothReady(); });
-    createPlayer('player-after', afterId, (p) => { afterPlayerRef.current = p; }, () => { isReady2 = true; checkBothReady(); });
-  }, [beforeId, afterId]);
+    playerBefore.current = new window.YT.Player('yt-before', {
+      videoId: videoIdBefore,
+      playerVars: commonVars,
+      events: {
+        onReady: () => {
+          const d = playerBefore.current.getDuration();
+          if (d > 0) setDuration(d);
+        },
+        onStateChange: (e: any) => {
+          if (e.data === window.YT.PlayerState.PLAYING) setIsPlaying(true);
+          if (e.data === window.YT.PlayerState.PAUSED)  setIsPlaying(false);
+        },
+      },
+    });
 
-  // Master Unified Play/Pause
-  const togglePlay = () => {
-    if (!beforePlayerRef.current || !afterPlayerRef.current) return;
-    if (isPlaying) {
-      beforePlayerRef.current.pauseVideo();
-      afterPlayerRef.current.pauseVideo();
-      setIsPlaying(false);
-    } else {
-      beforePlayerRef.current.playVideo();
-      afterPlayerRef.current.playVideo();
-      setIsPlaying(true);
-    }
+    playerAfter.current = new window.YT.Player('yt-after', { videoId: videoIdAfter, playerVars: commonVars });
+    setStarted(true);
   };
 
-  // Real-Time Drift Lock Engine (200ms polling, 0.12s tolerance)
+  // ── Cleanup on unmount ───────────────────────────────────────────────
+  useEffect(() => () => {
+    if (driftTimer.current) clearInterval(driftTimer.current);
+    if (seekTimer.current)  clearInterval(seekTimer.current);
+  }, []);
+
+  // ── Drift-lock engine (200 ms) ───────────────────────────────────────
   useEffect(() => {
-    if (!isPlaying) return;
-    const intv = setInterval(() => {
-      const t1 = beforePlayerRef.current?.getCurrentTime();
-      const t2 = afterPlayerRef.current?.getCurrentTime();
-      if (t1 !== undefined && t2 !== undefined) {
-        if (Math.abs(t2 - (t1 + offset)) > 0.12) {
-          afterPlayerRef.current.seekTo(t1 + offset, true);
+    if (!started) return;
+    driftTimer.current = setInterval(() => {
+      if (!playerBefore.current?.getCurrentTime || !playerAfter.current?.getCurrentTime) return;
+      try {
+        const tBefore = playerBefore.current.getCurrentTime();
+        const tAfter  = playerAfter.current.getCurrentTime();
+        const expected = tBefore + offset;
+        const drift    = Math.abs(expected - tAfter);
+        setDriftInfo(`Drift: ${drift.toFixed(3)}s`);
+        if (drift > 0.12 && isPlaying) {
+          playerAfter.current.seekTo(expected, true);
         }
-        setCurrentTime(t1);
-      }
+      } catch { /* players not ready */ }
     }, 200);
-    return () => clearInterval(intv);
-  }, [isPlaying, offset]);
+    return () => { if (driftTimer.current) clearInterval(driftTimer.current); };
+  }, [started, isPlaying, offset]);
 
-  // Master Scrubber logic
-  const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    if (isNaN(val)) return;
-    
-    setCurrentTime(val);
-    if (beforePlayerRef.current) beforePlayerRef.current.seekTo(val, true);
-    if (afterPlayerRef.current) afterPlayerRef.current.seekTo(val + offset, true);
+  // ── Scrubber update (500 ms) ─────────────────────────────────────────
+  useEffect(() => {
+    if (!started) return;
+    seekTimer.current = setInterval(() => {
+      try {
+        const t = playerBefore.current?.getCurrentTime?.() ?? 0;
+        const d = playerBefore.current?.getDuration?.()    ?? 0;
+        if (d > 0) { setDuration(d); setSliderVal(t); }
+      } catch { /* ignore */ }
+    }, 500);
+    return () => { if (seekTimer.current) clearInterval(seekTimer.current); };
+  }, [started]);
+
+  // ── Controls ─────────────────────────────────────────────────────────
+  const togglePlay = () => {
+    if (!started) return;
+    if (isPlaying) {
+      playerBefore.current?.pauseVideo();
+      playerAfter.current?.pauseVideo();
+    } else {
+      playerBefore.current?.playVideo();
+      playerAfter.current?.playVideo();
+    }
+    setIsPlaying(p => !p);
   };
 
-  // Manual Alignment Calibration Control
-  const handleOffsetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = parseFloat(e.target.value);
-    if (isNaN(val)) return;
-    
-    // clamp to -5.0 to 5.0 just in case
-    val = Math.max(-5.0, Math.min(5.0, val));
-    setOffset(val);
-    
-    if (isPlaying && beforePlayerRef.current && afterPlayerRef.current) {
-      const base = beforePlayerRef.current.getCurrentTime();
-      afterPlayerRef.current.seekTo(base + val, true);
-    }
+  const handleSeek = (_: Event, val: number | number[]) => {
+    const t = val as number;
+    setSliderVal(t);
+    const now = Date.now();
+    if (now - lastSeek.current < 80) return;   // throttle to 80 ms
+    lastSeek.current = now;
+    playerBefore.current?.seekTo(t, true);
+    playerAfter.current?.seekTo(t + offset, true);
   };
 
-  const handleStartFullscreen = async () => {
-    const b = extractVideoId(beforeInput.trim());
-    const a = extractVideoId(afterInput.trim());
-    if (!b || !a) {
-      alert('Please enter valid YouTube URLs or IDs for both videos.');
-      return;
-    }
+  const handleFullscreen = () => containerRef.current?.requestFullscreen?.();
 
-    try {
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-      }
-    } catch (e) {
-      console.warn("Fullscreen request failed", e);
-    }
-
-    setBeforeId(b);
-    setAfterId(a);
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
-  const handleExitFullscreen = async () => {
-    try {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        await document.exitFullscreen();
-      }
-    } catch (e) {
-      console.warn(e);
-    }
-    // Optionally go back to inputs
-    setBeforeId(null);
-    setAfterId(null);
-  };
-
-  if (!beforeId || !afterId) {
+  // ── Setup screen ─────────────────────────────────────────────────────
+  if (!started) {
     return (
-      <Box sx={{ p: 4, maxWidth: 800, mx: 'auto', mt: 4 }}>
-        <Paper elevation={0} sx={{ p: 4, borderRadius: 3, border: '1px solid #E2E8F0', bgcolor: '#F8FAFC' }}>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F172A', mb: 1, fontFamily: 'Outfit' }}>
-            Before & After Video Comparison
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#475569', mb: 4 }}>
-            Enter the YouTube links for the pre-monsoon and post-monsoon videos. 
-            The comparison will launch in <strong>Full Screen mode</strong> (similar to online test formats) for maximum visibility.
-          </Typography>
-          
-          <TextField fullWidth label="Before video (YouTube URL or ID)" margin="normal" value={beforeInput} onChange={(e) => setBeforeInput(e.target.value)} sx={{ bgcolor: '#FFF' }} />
-          <TextField fullWidth label="After video (YouTube URL or ID)" margin="normal" value={afterInput} onChange={(e) => setAfterInput(e.target.value)} sx={{ bgcolor: '#FFF' }} />
-          
-          <Button 
-            variant="contained" 
-            size="large"
-            startIcon={<FullscreenIcon />}
-            sx={{ mt: 3, bgcolor: '#10B981', '&:hover': { bgcolor: '#059669' }, px: 4, py: 1.5, fontWeight: 700 }} 
-            onClick={handleStartFullscreen}
-          >
-            Enter Full Screen & Start
-          </Button>
+      <Box sx={{ p: 4, maxWidth: 600, mx: 'auto' }}>
+        <Typography variant="h5" sx={{ fontFamily: 'Outfit', fontWeight: 800, mb: 1 }}>
+          Video Comparison
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
+          Enter two YouTube video IDs to compare Before / After drone surveys side-by-side with drift-locked playback.
+        </Typography>
+
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid #E2E8F0', borderRadius: 3, mb: 3 }}>
+          <TextField fullWidth label="Before Flight — YouTube Video ID"
+            value={videoIdBefore} onChange={e => setVideoIdBefore(e.target.value)} sx={{ mb: 2 }} />
+          <TextField fullWidth label="After Flight — YouTube Video ID"
+            value={videoIdAfter}  onChange={e => setVideoIdAfter(e.target.value)} />
         </Paper>
+
+        <Button fullWidth variant="contained" size="large"
+          disabled={!apiReady || !videoIdBefore || !videoIdAfter}
+          onClick={initPlayers}
+          sx={{ py: 1.8, borderRadius: 2, fontFamily: 'Outfit', fontWeight: 700,
+                background: 'linear-gradient(135deg, #10B981, #059669)' }}>
+          {apiReady ? 'Load Comparison' : 'Loading YouTube API…'}
+        </Button>
       </Box>
     );
   }
 
+  // ── Player screen ─────────────────────────────────────────────────────
   return (
-    <>
-      <style>
-        {`
-          :fullscreen {
-            background: #000;
-          }
-          :fullscreen #split-viewer-container {
-            width: 100vw;
-            height: 100vh;
-          }
-          #split-viewer-container {
-            width: 100%;
-            height: calc(100vh - 120px);
-            display: flex;
-            flex-direction: column;
-            background: #000;
-          }
-        `}
-      </style>
-      <Box id="split-viewer-container">
-        {/* Top Control Bar for Exiting */}
-        {document.fullscreenElement && (
-          <Box sx={{ width: '100%', p: 2, display: 'flex', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.8)', zIndex: 50 }}>
-             <Button variant="outlined" color="error" size="small" onClick={handleExitFullscreen} sx={{ fontWeight: 700 }}>
-               Exit Comparison
-             </Button>
-          </Box>
-        )}
-
-        <Box 
-          id="split-viewer" 
-          sx={{ display: 'flex', width: '100%', flexGrow: 1, position: 'relative', background: '#000', overflow: 'hidden' }}
-        >
-          {/* Before pane */}
-          <Box id="pane-before" sx={{ flex: '1 1 50%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-            <Box sx={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
-              <div id="player-before" style={{ width: '100%', height: '100%' }} />
-            </Box>
-            <Box 
-              sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5 }} 
-              onClick={() => {}} /* Intercepts clicks */
-            />
-            <Typography 
-              variant="caption" 
-              sx={{ position: 'absolute', top: 12, left: 12, color: '#fff', background: 'rgba(0,0,0,0.7)', px: 1.5, py: 0.5, borderRadius: 1, zIndex: 10, fontWeight: 700 }}
-            >
-              BEFORE
-            </Typography>
-          </Box>
-          
-          {/* After pane */}
-          <Box id="pane-after" sx={{ flex: '1 1 50%', height: '100%', position: 'relative', overflow: 'hidden', borderLeft: '2px solid #333' }}>
-            <Box sx={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
-              <div id="player-after" style={{ width: '100%', height: '100%' }} />
-            </Box>
-            <Box 
-              sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5 }} 
-              onClick={() => {}} 
-            />
-            <Typography 
-              variant="caption" 
-              sx={{ position: 'absolute', top: 12, left: 12, color: '#fff', background: 'rgba(0,0,0,0.7)', px: 1.5, py: 0.5, borderRadius: 1, zIndex: 10, fontWeight: 700 }}
-            >
-              AFTER
-            </Typography>
-          </Box>
+    <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#000' }}>
+      {/* Videos */}
+      <Box sx={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
+        {/* BEFORE */}
+        <Box sx={{ flex: '1 1 50%', position: 'relative' }}>
+          <Chip label="BEFORE" size="small"
+            sx={{ position: 'absolute', top: 12, left: 12, zIndex: 10,
+                  bgcolor: 'rgba(0,0,0,0.7)', color: '#fff', fontWeight: 700 }} />
+          <Box id="yt-before" sx={{ width: '100%', height: '100%' }} />
+          {/* Overlay to block native YouTube clicks */}
+          <Box sx={{ position: 'absolute', inset: 0, zIndex: 5, cursor: 'default' }} onClick={togglePlay} />
         </Box>
 
-        {/* Master Control Bar */}
-        <Box 
-          sx={{ 
-            height: 'auto', background: '#1e1e1e', display: 'flex', flexDirection: 'column', 
-            p: 2, zIndex: 20, borderTop: '1px solid #333'
-          }}
-        >
-          <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', gap: 2, mb: 1 }}>
-            <IconButton onClick={togglePlay} sx={{ color: '#fff', bgcolor: 'rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' } }}>
-              {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-            </IconButton>
-            
-            <input 
-              type="range"
-              min="0"
-              max={duration.toString()}
-              step="0.1"
-              value={currentTime}
-              onChange={handleScrub}
-              style={{ flexGrow: 1, cursor: 'pointer' }}
-            />
-            
-            <Typography variant="caption" sx={{ color: '#aaa', minWidth: 45 }}>
-              {Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'center' }}>
-            <Typography variant="caption" sx={{ color: '#888' }}>Alignment Offset:</Typography>
-            <input 
-              type="range"
-              min="-2.0"
-              max="2.0"
-              step="0.05"
-              value={offset}
-              onChange={handleOffsetChange}
-              style={{ width: 120, cursor: 'pointer' }}
-            />
-            <Typography variant="caption" sx={{ color: '#fff', minWidth: 40 }}>
-              {offset > 0 ? '+' : ''}{offset.toFixed(2)}s
-            </Typography>
-          </Box>
+        <Box sx={{ width: 2, bgcolor: '#fff', opacity: 0.3, flexShrink: 0 }} />
+
+        {/* AFTER */}
+        <Box sx={{ flex: '1 1 50%', position: 'relative' }}>
+          <Chip label="AFTER" size="small"
+            sx={{ position: 'absolute', top: 12, right: 12, zIndex: 10,
+                  bgcolor: 'rgba(0,0,0,0.7)', color: '#10B981', fontWeight: 700 }} />
+          <Box id="yt-after" sx={{ width: '100%', height: '100%' }} />
+          <Box sx={{ position: 'absolute', inset: 0, zIndex: 5, cursor: 'default' }} onClick={togglePlay} />
         </Box>
       </Box>
-    </>
+
+      {/* Controls bar */}
+      <Paper elevation={0} square
+        sx={{ bgcolor: '#0F172A', px: 3, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+
+        {/* Scrubber */}
+        <Slider value={sliderVal} min={0} max={duration || 100} step={0.5}
+          onChange={handleSeek}
+          sx={{ color: '#10B981', p: '6px 0',
+                '& .MuiSlider-thumb': { width: 14, height: 14 } }} />
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          {/* Play / Pause */}
+          <IconButton onClick={togglePlay} sx={{ bgcolor: '#10B981', color: '#fff',
+              '&:hover': { bgcolor: '#059669' }, width: 44, height: 44 }}>
+            {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+          </IconButton>
+
+          {/* Time */}
+          <Typography variant="caption" sx={{ color: '#94A3B8', fontFamily: 'monospace', minWidth: 90 }}>
+            {formatTime(sliderVal)} / {formatTime(duration)}
+          </Typography>
+
+          <Divider orientation="vertical" flexItem sx={{ borderColor: '#334155' }} />
+
+          {/* Offset */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 260 }}>
+            <SyncIcon sx={{ color: '#64748B', fontSize: 18 }} />
+            <Typography variant="caption" sx={{ color: '#94A3B8', whiteSpace: 'nowrap' }}>
+              Offset: {offset >= 0 ? '+' : ''}{offset.toFixed(2)}s
+            </Typography>
+            <Slider value={offset} min={-5} max={5} step={0.05}
+              onChange={(_, v) => setOffset(v as number)}
+              sx={{ color: '#6366F1', flex: 1,
+                    '& .MuiSlider-thumb': { width: 12, height: 12 } }} />
+          </Box>
+
+          <Divider orientation="vertical" flexItem sx={{ borderColor: '#334155' }} />
+
+          {/* Drift badge */}
+          <Typography variant="caption" sx={{ color: '#475569', fontFamily: 'monospace' }}>
+            {driftInfo}
+          </Typography>
+
+          {/* Fullscreen */}
+          <Tooltip title="Fullscreen">
+            <IconButton onClick={handleFullscreen} sx={{ color: '#94A3B8', ml: 'auto' }}>
+              <FullscreenIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Paper>
+    </Box>
   );
 };
 

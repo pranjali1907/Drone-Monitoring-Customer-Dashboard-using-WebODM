@@ -9,7 +9,6 @@ import { useAuth } from '../context/AuthContext';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import FolderOpenRoundedIcon from '@mui/icons-material/FolderOpenRounded';
 import AddBoxRoundedIcon from '@mui/icons-material/AddBoxRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import MapRoundedIcon from '@mui/icons-material/MapRounded';
 import CompareArrowsRoundedIcon from '@mui/icons-material/CompareArrowsRounded';
 
@@ -25,7 +24,7 @@ export const Sidebar: React.FC = () => {
       label: 'Overview',
       items: [
         { text: 'Dashboard', icon: <DashboardRoundedIcon />, path: '/dashboard', color: '#6366F1' },
-        { text: 'Map View', icon: <MapRoundedIcon />, path: '/projects', color: '#14B8A6' },
+        { text: 'Map View',  icon: <MapRoundedIcon />,       path: '/projects',   color: '#14B8A6' },
       ],
     },
     {
@@ -37,17 +36,12 @@ export const Sidebar: React.FC = () => {
     {
       label: 'Projects',
       items: [
-        { text: 'All Projects', icon: <FolderOpenRoundedIcon />, path: '/projects', color: '#F59E0B' },
+        { text: 'All Projects', icon: <FolderOpenRoundedIcon />, path: '/projects',        color: '#F59E0B' },
         ...(isAdmin ? [{ text: 'New Project', icon: <AddBoxRoundedIcon />, path: '/projects/create', color: '#10B981' }] : []),
       ],
     },
-    {
-      label: 'System',
-      items: [
-        { text: 'Settings', icon: <TuneRoundedIcon />, path: '/settings', color: '#94A3B8' },
-      ],
-    },
   ];
+
 
   return (
     <Drawer

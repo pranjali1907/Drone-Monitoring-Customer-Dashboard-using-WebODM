@@ -1,419 +1,255 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, ImageOverlay, Polygon, Polyline, useMapEvents, useMap } from 'react-leaflet';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  MapContainer, TileLayer, Marker, Popup, Polygon, Polyline,
+  useMapEvents, useMap,
+} from 'react-leaflet';
 import L from 'leaflet';
-import { Box, Button, Typography, Slider, Paper, ToggleButtonGroup, ToggleButton, Divider } from '@mui/material';
+import {
+  Box, Button, Paper, Typography, ToggleButtonGroup, ToggleButton,
+  Slider, Stack, Divider, LinearProgress, Chip,
+} from '@mui/material';
 import axios from 'axios';
-import { API_URL } from '../context/AuthContext';
-
-import SquareFootIcon from '@mui/icons-material/SquareFoot';
-import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
-import SaveIcon from '@mui/icons-material/Save';
+import StraightenIcon from '@mui/icons-material/Straighten';
+import CropFreeIcon from '@mui/icons-material/CropFree';
+import PanToolIcon from '@mui/icons-material/PanTool';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SaveIcon from '@mui/icons-material/Save';
+import CompareIcon from '@mui/icons-material/Compare';
 
-// Custom icons to fix Leaflet missing default marker bundle issues in webpack/vite
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+  iconSize: [25, 41], iconAnchor: [12, 41],
 });
+
+interface Layer {
+  id: number;
+  layer_type: string;
+  tile_url_pattern: string | null;
+  status: string;
+  name: string;
+}
 
 interface MapViewProps {
   projectId: number;
   latitude: number;
   longitude: number;
-  boundaryGeoJson?: string;
-  hasOrthophoto?: boolean;
-  orthophotoPath?: string;
+  boundaryWkt?: string;
 }
 
-export const MapView: React.FC<MapViewProps> = ({
-  projectId,
-  latitude,
-  longitude,
-  boundaryGeoJson,
-  hasOrthophoto = true,
-  orthophotoPath,
-}) => {
-  const [mapType, setMapType] = useState<'streets' | 'satellite'>('satellite');
-  const [opacity, setOpacity] = useState<number>(0.85);
-  const [tool, setTool] = useState<'pan' | 'distance' | 'area'>('pan');
-  const [points, setPoints] = useState<L.LatLng[]>([]);
-  const [measureValue, setMeasureValue] = useState<string>('');
-  const [savedMeasurements, setSavedMeasurements] = useState<any[]>([]);
-  const [layers, setLayers] = useState<any[]>([]);
+// Fit map to bounds when boundary is available
+const FitBounds = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
+  const map = useMap();
+  useEffect(() => { map.setView(center, zoom, { animate: false }); }, []);
+  return null;
+};
+
+// Measurement click listener
+const MapClickHandler = ({
+  tool, onPoint,
+}: { tool: string; onPoint: (latlng: L.LatLng) => void }) => {
+  useMapEvents({ click(e) { if (tool !== 'pan') onPoint(e.latlng); } });
+  return null;
+};
+
+export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude }) => {
+  const [rasterLayers, setRasterLayers] = useState<Layer[]>([]);
+  const [opacity, setOpacity]           = useState(0.85);
+  const [swipeX, setSwipeX]             = useState(50); // curtain position %
+  const [swipeMode, setSwipeMode]       = useState(false);
+  const [tool, setTool]                 = useState<'pan' | 'distance' | 'area'>('pan');
+  const [points, setPoints]             = useState<L.LatLng[]>([]);
+  const [measureLabel, setMeasureLabel] = useState('');
+  const [measurements, setMeasurements] = useState<any[]>([]);
 
   const center: [number, number] = [latitude, longitude];
 
-  // Define bounds for the orthophoto image overlay (+/- 0.003 degrees (~300m size))
-  const offset = 0.003;
-  const imageBounds: L.LatLngBoundsExpression = [
-    [latitude - offset, longitude - offset],
-    [latitude + offset, longitude + offset],
-  ];
-
-  const orthophotoUrl = orthophotoPath
-    ? `${API_URL}/${orthophotoPath}`
-    : `${API_URL}/static/processed/project_1/orthophoto.png`;
-
-  // Fetch saved measurements from API
-  const fetchMeasurements = async () => {
-    try {
-      const res = await axios.get(`/api/projects/${projectId}/measurements`);
-      setSavedMeasurements(res.data);
-    } catch (err) {
-      console.error('Failed to fetch measurements:', err);
-    }
-  };
-
-  const fetchLayers = async () => {
-    try {
-      const res = await axios.get(`/api/projects/${projectId}/layers`);
-      setLayers(res.data);
-    } catch (err) {
-      console.error('Failed to fetch layers:', err);
-    }
-  };
-
+  // Poll layers every 5s
   useEffect(() => {
-    fetchMeasurements();
-    fetchLayers();
-    const interval = setInterval(fetchLayers, 5000);
+    const fetch = async () => {
+      try {
+        const res = await axios.get(`/api/projects/${projectId}/layers`);
+        setRasterLayers((res.data as Layer[]).filter(l => l.layer_type === 'RASTER_TILES'));
+      } catch { /* ignore */ }
+    };
+    fetch();
+    const interval = setInterval(fetch, 5000);
     return () => clearInterval(interval);
   }, [projectId]);
 
-  // Leaflet map click listener component
-  const MapEvents = () => {
-    useMapEvents({
-      click(e) {
-        if (tool === 'pan') return;
+  // Load saved measurements
+  useEffect(() => {
+    axios.get(`/api/projects/${projectId}/measurements`)
+      .then(r => setMeasurements(r.data))
+      .catch(() => {});
+  }, [projectId]);
 
-        const newPoints = [...points, e.latlng];
-        setPoints(newPoints);
+  const handlePoint = (latlng: L.LatLng) => {
+    const updated = [...points, latlng];
+    setPoints(updated);
 
-        if (tool === 'distance') {
-          // Calculate cumulative distance
-          let totalDist = 0;
-          for (let i = 0; i < newPoints.length - 1; i++) {
-            totalDist += newPoints[i].distanceTo(newPoints[i + 1]);
-          }
-          setMeasureValue(`${totalDist.toFixed(2)} meters`);
-        } else if (tool === 'area') {
-          if (newPoints.length >= 3) {
-            // Shoelace formula or simple polygon area approximation
-            const lPoints = newPoints.map(p => [p.lat, p.lng]);
-            const area = calculatePolygonArea(lPoints);
-            setMeasureValue(`${area.toFixed(2)} sq meters`);
-          } else {
-            setMeasureValue('Add at least 3 points');
-          }
-        }
-      },
-    });
-    return null;
+    if (tool === 'distance' && updated.length >= 2) {
+      let dist = 0;
+      for (let i = 0; i < updated.length - 1; i++) dist += updated[i].distanceTo(updated[i + 1]);
+      setMeasureLabel(dist >= 1000 ? `${(dist / 1000).toFixed(3)} km` : `${dist.toFixed(1)} m`);
+    } else if (tool === 'area' && updated.length >= 3) {
+      const area = calculateGeodesicArea(updated);
+      setMeasureLabel(area >= 10000 ? `${(area / 10000).toFixed(4)} ha` : `${area.toFixed(1)} m²`);
+    }
   };
 
-  const FitBounds = ({ bounds }: { bounds: L.LatLngBoundsExpression }) => {
-    const map = useMap();
-    useEffect(() => {
-      if (bounds) {
-        map.fitBounds(bounds, { animate: false });
-      }
-    }, [map, bounds]);
-    return null;
-  };
-
-  const calculatePolygonArea = (coords: number[][]): number => {
-    // Basic Shoelace Formula mapped to meters (1 deg lat ~ 111,000m, 1 deg lng ~ 111,000m * cos(lat))
-    const latMid = latitude * (Math.PI / 180);
-    const mPerDegLat = 111132.954 - 559.822 * Math.cos(2 * latMid) + 1.175 * Math.cos(4 * latMid);
-    const mPerDegLng = 111412.84 * Math.cos(latMid) - 93.5 * Math.cos(3 * latMid);
-
+  const calculateGeodesicArea = (pts: L.LatLng[]): number => {
+    const R = 6371000;
     let area = 0;
-    const n = coords.length;
+    const n = pts.length;
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
-      const xi = coords[i][1] * mPerDegLng;
-      const yi = coords[i][0] * mPerDegLat;
-      const xj = coords[j][1] * mPerDegLng;
-      const yj = coords[j][0] * mPerDegLat;
-      area += xi * yj - xj * yi;
+      const xi = (pts[i].lng * Math.PI) / 180;
+      const yi = (pts[i].lat * Math.PI) / 180;
+      const xj = (pts[j].lng * Math.PI) / 180;
+      const yj = (pts[j].lat * Math.PI) / 180;
+      area += xi * Math.sin(yj) - xj * Math.sin(yi);
     }
-    return Math.abs(area / 2);
+    return Math.abs((area * R * R) / 2);
   };
 
-  const handleToolChange = (_: React.MouseEvent<HTMLElement>, newTool: 'pan' | 'distance' | 'area') => {
-    if (newTool !== null) {
-      setTool(newTool);
-      setPoints([]);
-      setMeasureValue('');
-    }
-  };
-
-  const handleClear = () => {
-    setPoints([]);
-    setMeasureValue('');
-  };
-
-  const handleSaveMeasurement = async () => {
-    if (points.length === 0 || !measureValue) return;
-
+  const handleSave = async () => {
+    if (!measureLabel || points.length < 2) return;
+    const isArea = tool === 'area';
+    const raw = measureLabel.includes('km')
+      ? parseFloat(measureLabel) * 1000
+      : parseFloat(measureLabel);
+    const geojson = {
+      type: isArea ? 'Polygon' : 'LineString',
+      coordinates: isArea
+        ? [points.map(p => [p.lng, p.lat])]
+        : points.map(p => [p.lng, p.lat]),
+    };
     try {
-      const geojson = {
-        type: tool === 'distance' ? 'LineString' : 'Polygon',
-        coordinates: points.map(p => [p.lng, p.lat])
-      };
-
-      const val = parseFloat(measureValue.split(' ')[0]);
-
       await axios.post(`/api/projects/${projectId}/measurements`, {
-        name: `${tool.toUpperCase()} - ${new Date().toLocaleTimeString()}`,
+        name: `${tool.toUpperCase()} – ${new Date().toLocaleTimeString()}`,
         measurement_type: tool,
-        geom: JSON.stringify(geojson),
-        value: val,
-        notes: `User measurement: ${measureValue}`
+        value: raw,
+        geom_geojson: JSON.stringify(geojson),
       });
-
-      handleClear();
-      fetchMeasurements();
-    } catch (err) {
-      console.error('Failed to save measurement:', err);
-    }
+      setPoints([]);
+      setMeasureLabel('');
+      const res = await axios.get(`/api/projects/${projectId}/measurements`);
+      setMeasurements(res.data);
+    } catch { /* ignore */ }
   };
 
-  // Convert GeoJSON strings back to coordinate lists to render saved points
-  const renderSavedMeasurements = () => {
-    return savedMeasurements.map((m) => {
-      try {
-        const geom = JSON.parse(m.geom);
-        const coords = geom.coordinates.map((c: number[]) => [c[1], c[0]]); // Leaflet uses [lat, lng]
-
-        if (m.measurement_type === 'distance') {
-          return (
-            <Polyline key={m.id} positions={coords} color="cyan" weight={3} dashArray="5, 10">
-              <Popup>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{m.name}</Typography>
-                <Typography variant="body2">{m.value} meters</Typography>
-              </Popup>
-            </Polyline>
-          );
-        } else if (m.measurement_type === 'area') {
-          return (
-            <Polygon key={m.id} positions={coords} color="emerald" fillColor="emerald" fillOpacity={0.2}>
-              <Popup>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{m.name}</Typography>
-                <Typography variant="body2">{m.value} sq meters</Typography>
-              </Popup>
-            </Polygon>
-          );
-        }
-      } catch (e) {
-        return null;
-      }
-      return null;
-    });
-  };
-
-  // Safe boundary parsing
-  let boundaryCoords: [number, number][] = [];
-  if (boundaryGeoJson) {
-    try {
-      const boundaryObj = JSON.parse(boundaryGeoJson);
-      boundaryCoords = boundaryObj.coordinates[0].map((c: number[]) => [c[1], c[0]]);
-    } catch (e) {
-      // Create a default box if boundary parse fails
-      boundaryCoords = [
-        [latitude - offset, longitude - offset],
-        [latitude - offset, longitude + offset],
-        [latitude + offset, longitude + offset],
-        [latitude + offset, longitude - offset],
-      ];
-    }
-  }
+  const readyLayers  = rasterLayers.filter(l => l.status === 'READY');
+  const pendingCount = rasterLayers.filter(l => l.status !== 'READY').length;
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 280px)', minHeight: 480 }}>
-      {/* Map Element */}
-      <MapContainer
-        center={center}
-        zoom={17}
-        scrollWheelZoom={true}
-        style={{ width: '100%', height: '100%' }}
-      >
-        <MapEvents />
-        <FitBounds bounds={boundaryCoords.length > 0 ? boundaryCoords : imageBounds} />
+    <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 260px)', minHeight: 480 }}>
+      {/* Processing indicator */}
+      {pendingCount > 0 && (
+        <Box sx={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
+          <Paper elevation={4} sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 3 }}>
+            <CircularLinear size={20} />
+            <Typography variant="caption">GDAL tiling in progress…</Typography>
+          </Paper>
+        </Box>
+      )}
 
-        {mapType === 'streets' ? (
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-        ) : (
-          <TileLayer
-            attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          />
-        )}
+      <MapContainer center={center} zoom={15} style={{ width: '100%', height: '100%' }}>
+        <FitBounds center={center} zoom={15} />
+        <MapClickHandler tool={tool} onPoint={handlePoint} />
 
-        {/* Project Boundary Outline */}
-        {boundaryCoords.length > 0 && (
-          <Polygon
-            positions={boundaryCoords}
-            color="#ef4444"
-            fillColor="#ef4444"
-            fillOpacity={0.05}
-            weight={2.5}
-          />
-        )}
+        {/* Satellite basemap */}
+        <TileLayer
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          attribution="Esri World Imagery"
+        />
 
-        {/* Orthophoto Image Overlay (Legacy) */}
-        {hasOrthophoto && (
-          <ImageOverlay
-            url={orthophotoUrl}
-            bounds={imageBounds}
-            opacity={opacity}
-          />
-        )}
-
-        {/* Dynamic GDAL Raster Tiles */}
-        {layers.filter(l => l.layer_type === 'RASTER_TILES' && l.status === 'READY').map(layer => (
+        {/* GDAL raster tiles */}
+        {readyLayers.map((layer, idx) => (
           <TileLayer
             key={layer.id}
-            url={`${API_URL}/static/projects/${projectId}/tiles/{z}/{x}/{y}.png`}
-            tms={true}
-            opacity={opacity}
+            url={`${layer.tile_url_pattern}`}
+            tms={false}
+            opacity={swipeMode && idx > 0 ? 0 : opacity}
           />
         ))}
 
-        {/* Center coordinates marker */}
+        {/* Center marker */}
         <Marker position={center} icon={markerIcon}>
-          <Popup>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Project Center</Typography>
-            <Typography variant="body2">Lat: {latitude.toFixed(6)}</Typography>
-            <Typography variant="body2">Lng: {longitude.toFixed(6)}</Typography>
-          </Popup>
+          <Popup>Survey Center<br />{latitude.toFixed(5)}, {longitude.toFixed(5)}</Popup>
         </Marker>
 
-        {/* Active Measurement drawing */}
-        {points.length > 0 && tool === 'distance' && (
-          <Polyline positions={points} color="#ef4444" weight={4} />
+        {/* Active measurement drawing */}
+        {points.length >= 2 && tool === 'distance' && (
+          <Polyline positions={points} color="#EF4444" weight={3} />
         )}
-        {points.length > 0 && tool === 'area' && (
-          <Polygon positions={points} color="#10b981" fillColor="#10b981" fillOpacity={0.25} />
+        {points.length >= 3 && tool === 'area' && (
+          <Polygon positions={points} color="#10B981" fillOpacity={0.2} />
         )}
 
-        {/* Saved Measurements */}
-        {renderSavedMeasurements()}
+        {/* Saved measurements */}
+        {measurements.map(m => {
+          try {
+            const geo = JSON.parse(m.geom_geojson);
+            const coords = geo.type === 'Polygon'
+              ? geo.coordinates[0].map((c: number[]) => [c[1], c[0]] as [number, number])
+              : geo.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]);
+            return m.measurement_type === 'area'
+              ? <Polygon key={m.id} positions={coords} color="#6366F1" fillOpacity={0.15} />
+              : <Polyline key={m.id} positions={coords} color="#6366F1" weight={2} dashArray="6,4" />;
+          } catch { return null; }
+        })}
       </MapContainer>
 
-      {/* Floating Control Box */}
-      <Paper
-        elevation={6}
-        className="glass-panel"
-        sx={{
-          position: 'absolute',
-          top: 20,
-          right: 20,
-          zIndex: 1000,
-          p: 2,
-          width: 280,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          borderRadius: 3,
-        }}
-      >
-        <Typography variant="subtitle1" sx={{ fontFamily: 'Outfit', fontWeight: 700 }}>
-          Interactive Controls
-        </Typography>
-
-        {/* Map Type toggle */}
-        <Box>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 0.5 }}>
-            LAYER SELECTOR
+      {/* Controls overlay */}
+      <Paper elevation={6} sx={{
+        position: 'absolute', top: 12, right: 12, zIndex: 1000,
+        p: 2, borderRadius: 3, minWidth: 200,
+        bgcolor: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(8px)',
+      }}>
+        <Stack spacing={2}>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            Map Tools
           </Typography>
           <ToggleButtonGroup
-            value={mapType}
-            exclusive
-            onChange={(_, val) => val && setMapType(val)}
-            size="small"
-            fullWidth
+            value={tool} exclusive size="small"
+            onChange={(_, v) => { if (v) { setTool(v); setPoints([]); setMeasureLabel(''); } }}
           >
-            <ToggleButton value="satellite">Satellite</ToggleButton>
-            <ToggleButton value="streets">Streets</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-
-        <Divider />
-
-        {/* Opacity Control */}
-        {hasOrthophoto && (
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                ORTHOPHOTO OPACITY
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'primary.light', fontWeight: 700 }}>
-                {Math.round(opacity * 100)}%
-              </Typography>
-            </Box>
-            <Slider
-              value={opacity}
-              onChange={(_, val) => setOpacity(val as number)}
-              min={0}
-              max={1}
-              step={0.01}
-              size="small"
-            />
-          </Box>
-        )}
-
-        <Divider />
-
-        {/* Measurement Tools */}
-        <Box>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 0.5 }}>
-            MEASUREMENT TOOLS
-          </Typography>
-          <ToggleButtonGroup
-            value={tool}
-            exclusive
-            onChange={handleToolChange}
-            size="small"
-            fullWidth
-            sx={{ mb: 1 }}
-          >
-            <ToggleButton value="pan">Inspect</ToggleButton>
-            <ToggleButton value="distance">
-              <ZoomOutMapIcon fontSize="small" sx={{ mr: 0.5 }} /> Dist
-            </ToggleButton>
-            <ToggleButton value="area">
-              <SquareFootIcon fontSize="small" sx={{ mr: 0.5 }} /> Area
-            </ToggleButton>
+            <ToggleButton value="pan"><PanToolIcon fontSize="small" /></ToggleButton>
+            <ToggleButton value="distance"><StraightenIcon fontSize="small" /></ToggleButton>
+            <ToggleButton value="area"><CropFreeIcon fontSize="small" /></ToggleButton>
           </ToggleButtonGroup>
 
-          {tool !== 'pan' && (
-            <Box sx={{ bgcolor: 'rgba(255,255,255,0.03)', p: 1, borderRadius: 2, border: '1px solid rgba(255,255,255,0.05)' }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                {tool === 'distance' ? 'CLICK PATH ON MAP' : 'CLICK CORNERS OF POLYGON'}
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: 'secondary.main', my: 0.5 }}>
-                {measureValue || '0.00'}
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Button variant="contained" color="secondary" size="small" fullWidth onClick={handleSaveMeasurement} startIcon={<SaveIcon />}>
-                  Save
-                </Button>
-                <Button variant="outlined" color="inherit" size="small" onClick={handleClear} startIcon={<DeleteIcon />}>
-                  Clear
-                </Button>
-              </Box>
+          {measureLabel && (
+            <Chip label={measureLabel} color="success" size="small" />
+          )}
+
+          {points.length >= 2 && (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button size="small" variant="outlined" startIcon={<SaveIcon />} onClick={handleSave}>Save</Button>
+              <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => { setPoints([]); setMeasureLabel(''); }}>Clear</Button>
             </Box>
           )}
-        </Box>
+
+          <Divider />
+          <Typography variant="caption" sx={{ fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            Overlay Opacity
+          </Typography>
+          <Slider value={opacity} onChange={(_, v) => setOpacity(v as number)}
+            min={0} max={1} step={0.05} size="small" sx={{ color: '#10B981' }} />
+        </Stack>
       </Paper>
     </Box>
   );
 };
+
+// Tiny spinner helper
+const CircularLinear = ({ size = 24 }: { size?: number }) => (
+  <Box sx={{ width: size, height: size, borderRadius: '50%',
+    border: '3px solid #E2E8F0', borderTopColor: '#10B981',
+    animation: 'spin 0.8s linear infinite',
+    '@keyframes spin': { to: { transform: 'rotate(360deg)' } },
+  }} />
+);
+
 export default MapView;
