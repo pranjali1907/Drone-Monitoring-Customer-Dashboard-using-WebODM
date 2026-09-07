@@ -38,8 +38,69 @@ class ProjectLayerResponse(BaseModel):
     drive_url: Optional[str]
     tile_url_pattern: Optional[str]
     status: str
-    error_message: Optional[str]
-    created_at: datetime.datetime
+    error_message: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    crs: Optional[str] = None
+    resolution_cm: Optional[float] = None
+    metadata_json: Optional[str] = None
+    created_at: Optional[datetime.datetime] = None
+    class Config:
+        from_attributes = True
+
+
+# ── DroneImage Schemas ───────────────────────────────────────────────────
+class DroneImageResponse(BaseModel):
+    id: int
+    project_id: int
+    filename: str
+    drive_file_id: Optional[str] = None
+    drive_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude_m: Optional[float] = None
+    heading_deg: Optional[float] = None
+    captured_at: Optional[datetime.datetime] = None
+    created_at: Optional[datetime.datetime] = None
+    class Config:
+        from_attributes = True
+
+
+class DroneImageCreate(BaseModel):
+    filename: str
+    drive_file_id: Optional[str] = None
+    drive_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude_m: Optional[float] = None
+    heading_deg: Optional[float] = None
+    captured_at: Optional[datetime.datetime] = None
+
+
+class NearestImageResult(BaseModel):
+    image: DroneImageResponse
+    distance_meters: float
+
+class VideoResponse(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    filename: str
+    filepath: str
+    filesize: Optional[int] = 0
+    duration: Optional[int] = 0
+    created_at: Optional[datetime.datetime] = None
+    class Config:
+        from_attributes = True
+
+class ReportResponse(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    report_type: str
+    filepath: str
+    created_at: Optional[datetime.datetime] = None
     class Config:
         from_attributes = True
 
@@ -84,8 +145,12 @@ class ProjectResponse(BaseModel):
     status: str
     created_at: datetime.datetime
     layers: List[ProjectLayerResponse] = []
+    images: List[DroneImageResponse] = []
     class Config:
         from_attributes = True
+
+class ProjectDetailResponse(ProjectResponse):
+    pass
 
 
 # ── Measurement Schemas ──────────────────────────────────────────────────

@@ -11,28 +11,44 @@ import VideocamRoundedIcon from '@mui/icons-material/VideocamRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PauseRoundedIcon from '@mui/icons-material/PauseRounded';
 import SyncRoundedIcon from '@mui/icons-material/SyncRounded';
+import FullscreenRoundedIcon from '@mui/icons-material/FullscreenRounded';
+import FullscreenExitRoundedIcon from '@mui/icons-material/FullscreenExitRounded';
 
-interface DroneImage { id: number; filename: string; filepath: string; }
-interface DroneVideo { id: number; filename: string; filepath: string; }
+interface DroneImage { id: number; filename: string; filepath?: string; thumbnail_url?: string; drive_url?: string; }
+interface DroneVideo { id: number; filename: string; filepath?: string; }
+interface RasterLayerItem { id: number; name: string; tile_url_pattern?: string | null; }
 
 interface ComparisonSliderProps {
   projectId: number;
   images?: DroneImage[];
   videos?: DroneVideo[];
+  rasterLayers?: RasterLayerItem[];
 }
 
-/** Fallback aerial images when no uploads exist */
+/** Fallback aerial images and videos when no project uploads exist */
 const FALLBACK_BEFORE = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Aerial_view_of_Morro_Bay%2C_California_-_May_2013.jpg/1280px-Aerial_view_of_Morro_Bay%2C_California_-_May_2013.jpg';
 const FALLBACK_AFTER  = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Aerial_photograph_of_a_solar_farm.jpg/1280px-Aerial_photograph_of_a_solar_farm.jpg';
+const FALLBACK_VIDEO_BEFORE = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+const FALLBACK_VIDEO_AFTER  = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4';
 
-export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, images = [], videos = [] }) => {
+export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({
+  projectId, images = [], videos = [], rasterLayers = [],
+}) => {
   const [mode, setMode] = useState<'image' | 'video'>('image');
+
+  // Determine intelligent default before/after selection:
+  const initialBefore = rasterLayers.length > 1
+    ? `raster_${rasterLayers[0].id}`
+    : '__fallback_before__';
+  const initialAfter = rasterLayers.length > 1
+    ? `raster_${rasterLayers[1].id}`
+    : (rasterLayers.length === 1 ? `raster_${rasterLayers[0].id}` : '__fallback_after__');
 
   // ── IMAGE mode state ───────────────────────────────────────────────────
   const [sliderPos, setSliderPos] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
-  const [beforeImageId, setBeforeImageId] = useState<string>('__fallback_before__');
-  const [afterImageId, setAfterImageId]   = useState<string>('__fallback_after__');
+  const [beforeImageId, setBeforeImageId] = useState<string>(initialBefore);
+  const [afterImageId, setAfterImageId]   = useState<string>(initialAfter);
   const [beforeLoaded, setBeforeLoaded] = useState(false);
   const [afterLoaded, setAfterLoaded]   = useState(false);
   const [beforeError, setBeforeError]   = useState(false);
@@ -42,14 +58,36 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
   const resolveImgUrl = (id: string): string => {
     if (id === '__fallback_before__') return FALLBACK_BEFORE;
     if (id === '__fallback_after__')  return FALLBACK_AFTER;
+    if (id.startsWith('raster_')) {
+      const layerId = id.replace('raster_', '');
+      return `/tiles/${layerId}/preview.jpg`;
+    }
     const img = images.find(i => String(i.id) === id);
-    return img ? `${API_URL}/${img.filepath}` : FALLBACK_BEFORE;
+    if (img) {
+      if (img.thumbnail_url) return img.thumbnail_url;
+      if (img.drive_url) return img.drive_url;
+      if (img.filepath) return `${API_URL}/${img.filepath}`;
+    }
+    return FALLBACK_BEFORE;
+  };
+
+  const getLabel = (id: string, fallback: string): string => {
+    if (id === '__fallback_before__') return 'Pre-Construction Survey (Baseline)';
+    if (id === '__fallback_after__') return 'Post-Construction Survey';
+    if (id.startsWith('raster_')) {
+      const lid = Number(id.replace('raster_', ''));
+      const rl = rasterLayers.find(r => r.id === lid);
+      return rl ? `ECW Survey: ${rl.name}` : 'ECW Survey Raster';
+    }
+    const img = images.find(i => String(i.id) === id);
+    return img ? img.filename : fallback;
   };
 
   const beforeSrc = beforeError ? FALLBACK_BEFORE : resolveImgUrl(beforeImageId);
   const afterSrc  = afterError  ? FALLBACK_AFTER  : resolveImgUrl(afterImageId);
-  const beforeLabel = images.find(i => String(i.id) === beforeImageId)?.filename ?? 'Pre-Construction Survey';
-  const afterLabel  = images.find(i => String(i.id) === afterImageId)?.filename  ?? 'Post-Construction';
+  const beforeLabel = getLabel(beforeImageId, 'Pre-Construction Survey');
+  const afterLabel  = getLabel(afterImageId, 'Post-Construction Survey');
+
 
   const updateSlider = useCallback((clientX: number) => {
     if (!containerRef.current) return;
@@ -77,19 +115,43 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
   }, [isDragging, onMouseMove, onTouchMove]);
 
   // ── VIDEO mode state ───────────────────────────────────────────────────
-  const [beforeVideoId, setBeforeVideoId] = useState<string>('');
-  const [afterVideoId, setAfterVideoId]   = useState<string>('');
+  const [beforeVideoId, setBeforeVideoId] = useState<string>(
+    videos.length > 0 ? String(videos[0].id) : '__fallback_video_before__'
+  );
+  const [afterVideoId, setAfterVideoId]   = useState<string>(
+    videos.length > 1 ? String(videos[1].id) : '__fallback_video_after__'
+  );
   const [playing, setPlaying]             = useState(false);
   const [syncTime, setSyncTime]           = useState(0);   // seconds
   const [maxDuration, setMaxDuration]     = useState(0);
+  const [isFullscreen, setIsFullscreen]   = useState(false);
   const beforeVideoRef = useRef<HTMLVideoElement>(null);
   const afterVideoRef  = useRef<HTMLVideoElement>(null);
+  const videoCardRef   = useRef<HTMLDivElement>(null);
   const seekingRef     = useRef(false);
 
   const resolveVideoUrl = (id: string): string => {
+    if (id === '__fallback_video_before__') return FALLBACK_VIDEO_BEFORE;
+    if (id === '__fallback_video_after__')  return FALLBACK_VIDEO_AFTER;
     const v = videos.find(v => String(v.id) === id);
     return v ? `${API_URL}/${v.filepath}` : '';
   };
+
+  // Sub-0.12s active drift-lock sync engine
+  useEffect(() => {
+    if (!playing) return;
+    const driftInterval = setInterval(() => {
+      const bv = beforeVideoRef.current;
+      const av = afterVideoRef.current;
+      if (!bv || !av) return;
+      const drift = Math.abs(bv.currentTime - av.currentTime);
+      if (drift > 0.12) {
+        // Drift detected beyond 120ms: snap secondary to lead video
+        av.currentTime = bv.currentTime;
+      }
+    }, 120);
+    return () => clearInterval(driftInterval);
+  }, [playing]);
 
   const handlePlayPause = () => {
     const bv = beforeVideoRef.current;
@@ -97,10 +159,13 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
     if (!bv && !av) return;
     if (playing) {
       bv?.pause(); av?.pause();
+      setPlaying(false);
     } else {
-      bv?.play().catch(() => {}); av?.play().catch(() => {});
+      // Synchronous start
+      bv?.play().catch(() => {});
+      av?.play().catch(() => {});
+      setPlaying(true);
     }
-    setPlaying(p => !p);
   };
 
   const handleSeekChange = (_: Event, value: number | number[]) => {
@@ -130,6 +195,15 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
   const syncBothToTime = (t: number) => {
     if (beforeVideoRef.current) beforeVideoRef.current.currentTime = t;
     if (afterVideoRef.current)  afterVideoRef.current.currentTime  = t;
+  };
+
+  const toggleFullscreen = () => {
+    if (!videoCardRef.current) return;
+    if (!document.fullscreenElement) {
+      videoCardRef.current.requestFullscreen?.().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen?.().then(() => setIsFullscreen(false)).catch(() => {});
+    }
   };
 
   const imagesReady = (beforeLoaded || beforeError) && (afterLoaded || afterError);
@@ -195,17 +269,22 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
                 sx={{ borderRadius: '10px', fontFamily: 'Outfit' }}
               >
                 <MenuItem value="__fallback_before__">
-                  <em>Default — Pre-Construction</em>
+                  <em>Default Baseline (Pre-Construction)</em>
                 </MenuItem>
+                {rasterLayers.map(rl => (
+                  <MenuItem key={`rl_b_${rl.id}`} value={`raster_${rl.id}`}>
+                    🛰️ ECW: {rl.name}
+                  </MenuItem>
+                ))}
                 {images.map(img => (
                   <MenuItem key={img.id} value={String(img.id)}>
-                    {img.filename}
+                    📸 {img.filename}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 240 }}>
+            <FormControl size="small" sx={{ minWidth: 260 }}>
               <InputLabel sx={{ fontFamily: 'Outfit' }}>After Image</InputLabel>
               <Select
                 value={afterImageId}
@@ -214,11 +293,16 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
                 sx={{ borderRadius: '10px', fontFamily: 'Outfit' }}
               >
                 <MenuItem value="__fallback_after__">
-                  <em>Default — Post-Construction</em>
+                  <em>Default Progress (Post-Construction)</em>
                 </MenuItem>
+                {rasterLayers.map(rl => (
+                  <MenuItem key={`rl_a_${rl.id}`} value={`raster_${rl.id}`}>
+                    🛰️ ECW: {rl.name}
+                  </MenuItem>
+                ))}
                 {images.map(img => (
                   <MenuItem key={img.id} value={String(img.id)}>
-                    {img.filename}
+                    📸 {img.filename}
                   </MenuItem>
                 ))}
               </Select>
@@ -345,8 +429,8 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
       {mode === 'video' && (
         <>
           {/* ── Video Selectors ───────────────────────────────────────── */}
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
-            <FormControl size="small" sx={{ minWidth: 240 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }} alignItems="center">
+            <FormControl size="small" sx={{ minWidth: 260 }}>
               <InputLabel sx={{ fontFamily: 'Outfit' }}>Before Video</InputLabel>
               <Select
                 value={beforeVideoId}
@@ -354,12 +438,14 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
                 onChange={e => { setBeforeVideoId(e.target.value); setPlaying(false); setSyncTime(0); setMaxDuration(0); }}
                 sx={{ borderRadius: '10px', fontFamily: 'Outfit' }}
               >
-                <MenuItem value=""><em>— Select a video —</em></MenuItem>
+                <MenuItem value="__fallback_video_before__">
+                  <em>Sample Flight — Baseline</em>
+                </MenuItem>
                 {videos.map(v => <MenuItem key={v.id} value={String(v.id)}>{v.filename}</MenuItem>)}
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 240 }}>
+            <FormControl size="small" sx={{ minWidth: 260 }}>
               <InputLabel sx={{ fontFamily: 'Outfit' }}>After Video</InputLabel>
               <Select
                 value={afterVideoId}
@@ -367,131 +453,245 @@ export const ComparisonSlider: React.FC<ComparisonSliderProps> = ({ projectId, i
                 onChange={e => { setAfterVideoId(e.target.value); setPlaying(false); setSyncTime(0); setMaxDuration(0); }}
                 sx={{ borderRadius: '10px', fontFamily: 'Outfit' }}
               >
-                <MenuItem value=""><em>— Select a video —</em></MenuItem>
+                <MenuItem value="__fallback_video_after__">
+                  <em>Sample Flight — Progress Survey</em>
+                </MenuItem>
                 {videos.map(v => <MenuItem key={v.id} value={String(v.id)}>{v.filename}</MenuItem>)}
               </Select>
             </FormControl>
+
+            <Chip
+              label="Dual-Lockstep (<0.12s Sync)"
+              size="small"
+              sx={{ bgcolor: 'rgba(16,185,129,0.1)', color: '#059669', fontWeight: 700, fontSize: '0.75rem' }}
+            />
           </Stack>
 
-          {videos.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8, bgcolor: '#F8FAFC', borderRadius: '16px', border: '1px dashed #D1FAE5' }}>
-              <VideocamRoundedIcon sx={{ fontSize: 48, color: '#A7F3D0', mb: 1.5 }} />
-              <Typography sx={{ fontWeight: 700, color: '#475569', mb: 0.5 }}>No videos uploaded yet</Typography>
-              <Typography variant="body2" sx={{ color: '#94A3B8' }}>Upload drone survey videos via the Admin Pipeline tab first.</Typography>
-            </Box>
-          ) : (
-            <Card sx={{ overflow: 'hidden', borderRadius: '18px', border: '1px solid #E2E8F0' }}>
-              {/* ── Dual Video Players ──────────────────────────────── */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, position: 'relative' }}>
-                {/* Before Video */}
-                <Box sx={{ position: 'relative', bgcolor: '#0F172A' }}>
-                  <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 5, bgcolor: 'rgba(244,63,94,0.85)', backdropFilter: 'blur(6px)', px: 1.5, py: 0.5, borderRadius: '8px' }}>
-                    <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Before</Typography>
-                  </Box>
-                  {beforeVideoId ? (
-                    <video
-                      ref={beforeVideoRef}
-                      src={resolveVideoUrl(beforeVideoId)}
-                      style={{ width: '100%', height: 300, objectFit: 'cover', display: 'block' }}
-                      onLoadedMetadata={() => handleVideoLoaded('before')}
-                      onTimeUpdate={handleTimeUpdate}
-                      muted={false}
-                    />
-                  ) : (
-                    <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1 }}>
-                      <VideocamRoundedIcon sx={{ fontSize: 40, color: 'rgba(255,255,255,0.2)' }} />
-                      <Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.82rem' }}>Select before video</Typography>
-                    </Box>
-                  )}
-                </Box>
-
-                {/* After Video */}
-                <Box sx={{ position: 'relative', bgcolor: '#0F172A', borderLeft: '2px solid #1E293B' }}>
-                  <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 5, bgcolor: 'rgba(20,184,166,0.85)', backdropFilter: 'blur(6px)', px: 1.5, py: 0.5, borderRadius: '8px' }}>
-                    <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>After</Typography>
-                  </Box>
-                  {afterVideoId ? (
-                    <video
-                      ref={afterVideoRef}
-                      src={resolveVideoUrl(afterVideoId)}
-                      style={{ width: '100%', height: 300, objectFit: 'cover', display: 'block' }}
-                      onLoadedMetadata={() => handleVideoLoaded('after')}
-                      muted={false}
-                    />
-                  ) : (
-                    <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1 }}>
-                      <VideocamRoundedIcon sx={{ fontSize: 40, color: 'rgba(255,255,255,0.2)' }} />
-                      <Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.82rem' }}>Select after video</Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Box>
-
-              {/* ── Unified Controls ────────────────────────────────── */}
-              <Box sx={{ px: 3, py: 2.5, bgcolor: '#0F172A', borderTop: '1px solid #1E293B' }}>
-                {/* Timestamp display */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5, alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <SyncRoundedIcon sx={{ fontSize: 14, color: '#10B981' }} />
-                    <Typography sx={{ fontSize: '0.72rem', color: '#A7F3D0', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Synchronized Seek
-                    </Typography>
-                  </Box>
-                  <Typography sx={{ fontSize: '0.8rem', color: '#94A3B8', fontFamily: 'monospace', fontWeight: 600 }}>
-                    {formatTime(syncTime)} / {formatTime(maxDuration)}
+          {/* ── Main Dual Video Comparison Stage ───────────────────────── */}
+          <Card
+            ref={videoCardRef}
+            sx={{
+              overflow: 'hidden',
+              borderRadius: '18px',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 4px 24px rgba(15,23,42,0.10)',
+              bgcolor: '#0B0F19',
+              position: 'relative',
+            }}
+          >
+            {/* ── Dual Video Screens ─────────────────────────────────── */}
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                position: 'relative',
+                minHeight: { xs: 260, sm: 380, md: 440 },
+                bgcolor: '#000000',
+              }}
+            >
+              {/* BEFORE Video Pane */}
+              <Box sx={{ position: 'relative', overflow: 'hidden', bgcolor: '#0F172A' }}>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 14,
+                    left: 14,
+                    zIndex: 5,
+                    bgcolor: 'rgba(244,63,94,0.9)',
+                    backdropFilter: 'blur(8px)',
+                    px: 1.5,
+                    py: 0.5,
+                    borderRadius: '8px',
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Before Survey
                   </Typography>
                 </Box>
-
-                {/* Unified seek bar */}
-                <Slider
-                  value={syncTime}
-                  min={0}
-                  max={maxDuration || 100}
-                  step={0.1}
-                  onChange={handleSeekChange}
-                  sx={{
-                    color: '#10B981',
-                    '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.12)', height: 5 },
-                    '& .MuiSlider-track': { height: 5 },
-                    '& .MuiSlider-thumb': {
-                      width: 16, height: 16,
-                      '&:hover, &.Mui-focusVisible': { boxShadow: '0 0 0 8px rgba(16,185,129,0.16)' },
-                    },
-                    mb: 2,
-                  }}
+                <video
+                  ref={beforeVideoRef}
+                  src={resolveVideoUrl(beforeVideoId)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 340 }}
+                  onLoadedMetadata={() => handleVideoLoaded('before')}
+                  onTimeUpdate={handleTimeUpdate}
+                  muted
+                  playsInline
                 />
+                {/* Transparent click catcher */}
+                <Box
+                  onClick={handlePlayPause}
+                  sx={{ position: 'absolute', inset: 0, zIndex: 4, cursor: 'pointer' }}
+                />
+              </Box>
 
-                {/* Play/Pause + Sync */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* AFTER Video Pane */}
+              <Box sx={{ position: 'relative', overflow: 'hidden', bgcolor: '#0F172A', borderLeft: { md: '2px solid #1E293B' } }}>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 14,
+                    right: 14,
+                    zIndex: 5,
+                    bgcolor: 'rgba(16,185,129,0.9)',
+                    backdropFilter: 'blur(8px)',
+                    px: 1.5,
+                    py: 0.5,
+                    borderRadius: '8px',
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    After Survey
+                  </Typography>
+                </Box>
+                <video
+                  ref={afterVideoRef}
+                  src={resolveVideoUrl(afterVideoId)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 340 }}
+                  onLoadedMetadata={() => handleVideoLoaded('after')}
+                  muted
+                  playsInline
+                />
+                {/* Transparent click catcher */}
+                <Box
+                  onClick={handlePlayPause}
+                  sx={{ position: 'absolute', inset: 0, zIndex: 4, cursor: 'pointer' }}
+                />
+              </Box>
+
+              {/* ── ONE COMMON CENTRALLY PLACED PRIMARY PLAY/PAUSE BUTTON ── */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 12,
+                  pointerEvents: 'none',
+                }}
+              >
+                <IconButton
+                  onClick={handlePlayPause}
+                  sx={{
+                    pointerEvents: 'auto',
+                    width: 72,
+                    height: 72,
+                    bgcolor: playing ? 'rgba(15,23,42,0.82)' : '#10B981',
+                    color: '#FFFFFF',
+                    border: '3px solid rgba(255,255,255,0.95)',
+                    boxShadow: playing
+                      ? '0 10px 30px rgba(0,0,0,0.6)'
+                      : '0 10px 35px rgba(16,185,129,0.65)',
+                    backdropFilter: 'blur(10px)',
+                    transition: 'transform 0.2s ease, background-color 0.2s ease',
+                    '&:hover': {
+                      transform: 'scale(1.12)',
+                      bgcolor: playing ? 'rgba(15,23,42,0.95)' : '#059669',
+                    },
+                  }}
+                  title={playing ? 'Pause Both Videos' : 'Play Both Videos Synchronously'}
+                >
+                  {playing ? (
+                    <PauseRoundedIcon sx={{ fontSize: 38 }} />
+                  ) : (
+                    <PlayArrowRoundedIcon sx={{ fontSize: 42, ml: 0.5 }} />
+                  )}
+                </IconButton>
+              </Box>
+            </Box>
+
+            {/* ── Unified Unified Scrubber & Controls ──────────────────── */}
+            <Box sx={{ px: 3, py: 2.5, bgcolor: '#0F172A', borderTop: '1px solid #1E293B' }}>
+              {/* Timeline Header */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <SyncRoundedIcon sx={{ fontSize: 16, color: '#10B981' }} />
+                  <Typography sx={{ fontSize: '0.74rem', color: '#A7F3D0', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Lockstep Synchronized Scrubbing
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: '0.82rem', color: '#94A3B8', fontFamily: 'monospace', fontWeight: 700 }}>
+                  {formatTime(syncTime)} / {formatTime(maxDuration)}
+                </Typography>
+              </Box>
+
+              {/* Scrubber Slider */}
+              <Slider
+                value={syncTime}
+                min={0}
+                max={maxDuration || 100}
+                step={0.1}
+                onChange={handleSeekChange}
+                sx={{
+                  color: '#10B981',
+                  '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.15)', height: 6 },
+                  '& .MuiSlider-track': { height: 6 },
+                  '& .MuiSlider-thumb': {
+                    width: 18,
+                    height: 18,
+                    bgcolor: '#FFFFFF',
+                    border: '2px solid #10B981',
+                    '&:hover, &.Mui-focusVisible': { boxShadow: '0 0 0 8px rgba(16,185,129,0.2)' },
+                  },
+                  mb: 1.5,
+                }}
+              />
+
+              {/* Bottom Control Actions */}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <Tooltip title={playing ? 'Pause both videos' : 'Play both videos'}>
                     <IconButton
                       onClick={handlePlayPause}
                       sx={{
-                        bgcolor: '#10B981', color: '#fff', width: 44, height: 44,
+                        bgcolor: '#10B981',
+                        color: '#fff',
+                        width: 42,
+                        height: 42,
                         '&:hover': { bgcolor: '#059669' },
-                        boxShadow: '0 4px 14px rgba(16,185,129,0.35)',
+                        boxShadow: '0 4px 14px rgba(16,185,129,0.4)',
                       }}
                     >
                       {playing ? <PauseRoundedIcon /> : <PlayArrowRoundedIcon />}
                     </IconButton>
                   </Tooltip>
 
-                  <Tooltip title="Sync both videos to current position">
+                  <Tooltip title="Resync both video playback positions">
                     <IconButton
                       onClick={() => syncBothToTime(syncTime)}
-                      sx={{ bgcolor: 'rgba(255,255,255,0.06)', color: '#A7F3D0', width: 36, height: 36, border: '1px solid rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(16,185,129,0.12)' } }}
+                      sx={{
+                        bgcolor: 'rgba(255,255,255,0.06)',
+                        color: '#A7F3D0',
+                        width: 38,
+                        height: 38,
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        '&:hover': { bgcolor: 'rgba(16,185,129,0.15)' },
+                      }}
                     >
                       <SyncRoundedIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
 
-                  <Typography sx={{ fontSize: '0.72rem', color: '#475569', ml: 1 }}>
-                    Both videos seek together. If one lags, click Sync to realign.
+                  <Typography sx={{ fontSize: '0.74rem', color: '#64748B', ml: 0.5 }}>
+                    Single master play control · Drift auto-correction enabled (&lt;0.12s)
                   </Typography>
                 </Box>
+
+                <Tooltip title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Video Comparison'}>
+                  <IconButton
+                    onClick={toggleFullscreen}
+                    sx={{
+                      color: '#94A3B8',
+                      bgcolor: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      '&:hover': { color: '#FFFFFF', bgcolor: 'rgba(255,255,255,0.1)' },
+                    }}
+                  >
+                    {isFullscreen ? <FullscreenExitRoundedIcon fontSize="small" /> : <FullscreenRoundedIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
               </Box>
-            </Card>
-          )}
+            </Box>
+          </Card>
         </>
       )}
     </Box>

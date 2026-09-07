@@ -74,10 +74,20 @@ def process_raster_layer(layer_id: int) -> None:
                         proj.latitude = round(avg_lat, 6)
                         proj.longitude = round(avg_lon, 6)
                         proj.boundary_wkt = json.dumps(wgs84)
-                        db.commit()
                         logger.info(f"[RASTER] Auto-detected GPS coordinates: {avg_lat}, {avg_lon} for Project #{proj.id}")
+
+                # Populate Layer metadata
+                layer.crs = meta.get("coordinateSystem", {}).get("wkt", "EPSG:3857")[:90] if meta.get("coordinateSystem") else "EPSG:3857"
+                layer.metadata_json = json.dumps({
+                    "driver": meta.get("driverShortName"),
+                    "size": meta.get("size"),
+                    "bands": len(meta.get("bands", [])),
+                })
+                if os.path.exists(raw_path):
+                    layer.file_size_bytes = os.path.getsize(raw_path)
+                db.commit()
         except Exception as err:
-            logger.warning(f"[RASTER] Failed to extract coordinates: {err}")
+            logger.warning(f"[RASTER] Failed to extract coordinates/metadata: {err}")
 
         # ── Step 4: Generate High-Res Preview Image for Before/After ───────
         preview_path = os.path.join(tiles_dir, "preview.jpg")

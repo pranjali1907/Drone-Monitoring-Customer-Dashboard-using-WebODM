@@ -9,10 +9,26 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:dronepassword_secure_99@db:5432/drone_monitoring"
+        "sqlite:///./drone_monitor.db" if os.name == "nt" else "postgresql://postgres:dronepassword_secure_99@db:5432/drone_monitoring"
     )
 
-    TILES_DIR: str = "/var/www/tiles"
+    TILES_DIR: str = os.getenv(
+        "TILES_DIR",
+        os.path.join(os.getcwd(), "processed", "tiles") if os.name == "nt" else "/var/www/tiles"
+    )
+
+    UPLOAD_DIR: str = os.getenv(
+        "UPLOAD_DIR",
+        os.path.join(os.getcwd(), "uploads")
+    )
+    PROCESSED_DIR: str = os.getenv(
+        "PROCESSED_DIR",
+        os.path.join(os.getcwd(), "processed")
+    )
+    REPORTS_DIR: str = os.getenv(
+        "REPORTS_DIR",
+        os.path.join(os.getcwd(), "reports")
+    )
 
     class Config:
         env_file = ".env"

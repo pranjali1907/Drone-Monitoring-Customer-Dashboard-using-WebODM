@@ -12,6 +12,7 @@ import server.auth as auth
 
 from server.routers import auth as auth_router
 from server.routers import projects as projects_router
+from server.routers import uploads as uploads_router
 from server.seed_demo import seed_admin
 
 # ── Create all DB tables ──────────────────────────────────────────────────
@@ -33,13 +34,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Static: GDAL tiles directory ──────────────────────────────────────────
+# ── Static directories ────────────────────────────────────────────────────
 os.makedirs(settings.TILES_DIR, exist_ok=True)
 app.mount("/tiles", StaticFiles(directory=settings.TILES_DIR), name="tiles")
+
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+os.makedirs(settings.PROCESSED_DIR, exist_ok=True)
+app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+app.mount("/static/processed", StaticFiles(directory=settings.PROCESSED_DIR), name="processed")
 
 # ── Routers ───────────────────────────────────────────────────────────────
 app.include_router(auth_router.router)
 app.include_router(projects_router.router)
+app.include_router(uploads_router.router)
 
 
 # ── Startup: seed admin ───────────────────────────────────────────────────

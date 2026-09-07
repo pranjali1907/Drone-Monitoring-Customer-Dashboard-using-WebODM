@@ -6,7 +6,7 @@ import {
 import L from 'leaflet';
 import {
   Box, Button, Paper, Typography, ToggleButtonGroup, ToggleButton,
-  Slider, Stack, Divider, Chip,
+  Slider, Stack, Divider, Chip, IconButton,
 } from '@mui/material';
 import axios from 'axios';
 import StraightenIcon from '@mui/icons-material/Straighten';
@@ -14,11 +14,21 @@ import CropFreeIcon from '@mui/icons-material/CropFree';
 import PanToolIcon from '@mui/icons-material/PanTool';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import MyLocationIcon from '@mui/icons-material/MyLocation';
+
 
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41], iconAnchor: [12, 41],
+});
+
+const cameraIcon = L.divIcon({
+  html: `<div style="background:#10B981;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #FFFFFF;box-shadow:0 3px 8px rgba(0,0,0,0.35);font-size:14px;">📸</div>`,
+  className: 'drone-cam-pin',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
 });
 
 interface Layer {
@@ -27,6 +37,18 @@ interface Layer {
   tile_url_pattern: string | null;
   status: string;
   name: string;
+}
+
+interface DroneImageItem {
+  id: number;
+  filename: string;
+  drive_url?: string;
+  thumbnail_url?: string;
+  latitude: number;
+  longitude: number;
+  altitude_m?: number;
+  heading_deg?: number;
+  captured_at?: string;
 }
 
 interface MapViewProps {
@@ -43,16 +65,18 @@ const FitBounds = ({ center, zoom }: { center: [number, number]; zoom: number })
   return null;
 };
 
-// Measurement click listener
+// Map click listener for measurements and drone photo queries
 const MapClickHandler = ({
-  tool, onPoint,
-}: { tool: string; onPoint: (latlng: L.LatLng) => void }) => {
-  useMapEvents({ click(e) { if (tool !== 'pan') onPoint(e.latlng); } });
+  onMapClick,
+}: { onMapClick: (latlng: L.LatLng) => void }) => {
+  useMapEvents({ click(e) { onMapClick(e.latlng); } });
   return null;
 };
 
 export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude }) => {
   const [rasterLayers, setRasterLayers] = useState<Layer[]>([]);
+  const [droneImages, setDroneImages]   = useState<DroneImageItem[]>([]);
+  const [nearestImage, setNearestImage] = useState<{ image: DroneImageItem; distance_meters: number } | null>(null);
   const [opacity, setOpacity]           = useState(0.85);
   const [tool, setTool]                 = useState<'pan' | 'distance' | 'area'>('pan');
   const [points, setPoints]             = useState<L.LatLng[]>([]);
@@ -61,16 +85,23 @@ export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude
 
   const center: [number, number] = [latitude, longitude];
 
-  // Poll layers every 5s
+  // Poll layers & images
   useEffect(() => {
-    const fetch = async () => {
+    const fetchLayers = async () => {
       try {
         const res = await axios.get(`/api/projects/${projectId}/layers`);
         setRasterLayers((res.data as Layer[]).filter(l => l.layer_type === 'RASTER_TILES'));
       } catch { /* ignore */ }
     };
-    fetch();
-    const interval = setInterval(fetch, 5000);
+    const fetchImages = async () => {
+      try {
+        const res = await axios.get(`/api/projects/${projectId}/images`);
+        setDroneImages(res.data);
+      } catch { /* ignore */ }
+    };
+    fetchLayers();
+    fetchImages();
+    const interval = setInterval(fetchLayers, 5000);
     return () => clearInterval(interval);
   }, [projectId]);
 
@@ -136,24 +167,83 @@ export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude
     } catch { /* ignore */ }
   };
 
+  const handleMapClick = async (latlng: L.LatLng) => {
+    if (tool !== 'pan') {
+      handlePoint(latlng);
+      return;
+    }
+    try {
+      const res = await axios.get(`/api/projects/${projectId}/images/nearest`, {
+        params: { lat: latlng.lat, lon: latlng.lng },
+      });
+      setNearestImage(res.data);
+    } catch {
+      // Ignore if no drone images are indexed yet
+    }
+  };
+
   const readyLayers  = rasterLayers.filter(l => l.status === 'READY');
   const pendingCount = rasterLayers.filter(l => l.status !== 'READY').length;
 
   return (
     <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 260px)', minHeight: 480 }}>
-      {/* Processing indicator */}
+      {/* Customer-friendly processing indicator */}
       {pendingCount > 0 && (
-        <Box sx={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
-          <Paper elevation={4} sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 3 }}>
-            <CircularLinear size={20} />
-            <Typography variant="caption">GDAL tiling in progress…</Typography>
+        <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
+          <Paper elevation={4} sx={{ px: 2.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(8px)' }}>
+            <CircularLinear size={18} />
+            <Typography variant="caption" sx={{ fontWeight: 600, color: '#0F172A' }}>
+              Processing high-resolution aerial survey tiles…
+            </Typography>
           </Paper>
         </Box>
       )}
 
+      {/* Floating Nearest Drone Image Inspection Card */}
+      {nearestImage && (
+        <Paper
+          elevation={8}
+          sx={{
+            position: 'absolute',
+            bottom: 24,
+            left: 24,
+            zIndex: 1000,
+            p: 2,
+            borderRadius: 3,
+            maxWidth: 320,
+            bgcolor: '#FFFFFF',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
+            border: '1px solid #E2E8F0',
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: '0.82rem', color: '#0F172A' }}>
+              📍 Nearest Drone Inspection Photo
+            </Typography>
+            <IconButton size="small" onClick={() => setNearestImage(null)}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <Typography sx={{ fontSize: '0.74rem', color: '#64748B', mb: 1 }}>
+            {nearestImage.image.filename} ({nearestImage.distance_meters.toFixed(1)}m from clicked point)
+          </Typography>
+          {nearestImage.image.thumbnail_url || nearestImage.image.drive_url ? (
+            <Box
+              component="img"
+              src={nearestImage.image.thumbnail_url || nearestImage.image.drive_url}
+              alt={nearestImage.image.filename}
+              sx={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 2, mb: 1 }}
+            />
+          ) : null}
+          <Typography sx={{ fontSize: '0.72rem', color: '#10B981', fontWeight: 700 }}>
+            GPS: {nearestImage.image.latitude.toFixed(5)}, {nearestImage.image.longitude.toFixed(5)}
+          </Typography>
+        </Paper>
+      )}
+
       <MapContainer center={center} zoom={15} style={{ width: '100%', height: '100%' }}>
         <FitBounds center={center} zoom={15} />
-        <MapClickHandler tool={tool} onPoint={handlePoint} />
+        <MapClickHandler onMapClick={handleMapClick} />
 
         {/* Satellite basemap */}
         <TileLayer
@@ -176,6 +266,27 @@ export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude
           <Popup>Survey Center<br />{latitude.toFixed(5)}, {longitude.toFixed(5)}</Popup>
         </Marker>
 
+        {/* Geotagged Drone Camera Positions */}
+        {droneImages.map((img) => (
+          <Marker
+            key={img.id}
+            position={[img.latitude, img.longitude]}
+            icon={cameraIcon}
+            eventHandlers={{
+              click: () => setNearestImage({ image: img, distance_meters: 0 }),
+            }}
+          >
+            <Popup>
+              <Box sx={{ p: 0.5, maxWidth: 220 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>{img.filename}</Typography>
+                <Typography sx={{ color: '#64748B', fontSize: '0.72rem' }}>
+                  Alt: {img.altitude_m ? `${img.altitude_m.toFixed(1)}m` : 'N/A'} · Heading: {img.heading_deg ? `${img.heading_deg}°` : 'N/A'}
+                </Typography>
+              </Box>
+            </Popup>
+          </Marker>
+        ))}
+
         {/* Active measurement drawing */}
         {points.length >= 2 && tool === 'distance' && (
           <Polyline positions={points} color="#EF4444" weight={3} />
@@ -183,6 +294,7 @@ export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude
         {points.length >= 3 && tool === 'area' && (
           <Polygon positions={points} color="#10B981" fillOpacity={0.2} />
         )}
+
 
         {/* Saved measurements */}
         {measurements.map(m => {

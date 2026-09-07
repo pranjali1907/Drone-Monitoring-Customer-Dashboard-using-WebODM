@@ -1,269 +1,492 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
-  Box, Paper, Typography, Stack, Switch, FormControlLabel,
-  CircularProgress, ToggleButtonGroup, ToggleButton, Divider,
+  Box, Typography, Paper, ToggleButtonGroup, ToggleButton, Stack,
+  Slider, Button, Chip, FormControl, Select, MenuItem, CircularProgress
 } from '@mui/material';
-import LayersIcon from '@mui/icons-material/Layers';
-import ScatterPlotIcon from '@mui/icons-material/ScatterPlot';
-import ViewInArIcon from '@mui/icons-material/ViewInAr';
+import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
+import axios from 'axios';
+import { API_URL } from '../context/AuthContext';
 
-interface PlyLayer {
-  id: number;
-  drive_file_id: string;
-  name: string;
-  status: string;
-}
+import Grid3x3Icon from '@mui/icons-material/Grid3x3';
+import TerrainIcon from '@mui/icons-material/Terrain';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import CloudDownloadRoundedIcon from '@mui/icons-material/CloudDownloadRounded';
 
-interface LoadedMesh {
-  name: string;
-  object: THREE.Object3D;
-  visible: boolean;
-  pointSize: number;
+import { PointCloudGeometry } from './VolumeCalculator';
+
+interface ServerPlyItem {
+  filename: string;
+  url: string;
+  filesize: number;
+  is_default: boolean;
 }
 
 interface ThreeDViewerProps {
-  layers: PlyLayer[];
+  projectId?: number;
+  /** Optional URL to a server-saved .ply file — auto-loads on mount when provided */
+  pointCloudUrl?: string;
+  /** Called after geometry is parsed so the parent can run volume calculations */
+  onGeometryLoaded?: (geo: PointCloudGeometry) => void;
 }
 
-const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ layers }) => {
-  const mountRef   = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const sceneRef   = useRef<THREE.Scene | null>(null);
-  const cameraRef  = useRef<THREE.PerspectiveCamera | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
-  const animFrameRef = useRef<number>(0);
+export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, pointCloudUrl, onGeometryLoaded }) => {
+  const mountRef = useRef<HTMLDivElement>(null);
+  const [renderMode, setRenderMode] = useState<'points' | 'mesh'>('points');
+  const [rotationSpeed, setRotationSpeed] = useState<number>(0.5);
+  const [stats, setStats] = useState({ points: 6000, cameraPitch: -45, cameraYaw: 30 });
+  const [loadedGeometry, setLoadedGeometry] = useState<THREE.BufferGeometry | null>(null);
+  const [fileName, setFileName] = useState<string>('');
+  const [serverLoaded, setServerLoaded] = useState(false);
+  const [serverPlyList, setServerPlyList] = useState<ServerPlyItem[]>([]);
+  const [selectedServerPly, setSelectedServerPly] = useState<string>('');
+  const [loadingPly, setLoadingPly] = useState(false);
 
-  const [loadedMeshes, setLoadedMeshes] = useState<LoadedMesh[]>([]);
-  const [loading, setLoading]           = useState(false);
-  const [progress, setProgress]         = useState(0);
-  const [renderMode, setRenderMode]     = useState<'points' | 'mesh'>('points');
-  const [pointCount, setPointCount]     = useState(0);
+  const parseAndLoadBuffer = (buffer: ArrayBuffer, displayName: string, isServer = false) => {
+    const loader = new PLYLoader();
+    try {
+      const geometry = loader.parse(buffer);
+      geometry.computeBoundingSphere();
+      geometry.center();
+      setLoadedGeometry(geometry);
+      setServerLoaded(isServer);
+      setFileName(displayName);
+      setRenderMode('points');
+      if (onGeometryLoaded) {
+        geometry.computeBoundingBox();
+        const pos = geometry.attributes.position;
+        onGeometryLoaded({
+          vertices: pos ? (pos.array as Float32Array) : new Float32Array(),
+          boundingBox: {
+            min: { x: geometry.boundingBox!.min.x, y: geometry.boundingBox!.min.y, z: geometry.boundingBox!.min.z },
+            max: { x: geometry.boundingBox!.max.x, y: geometry.boundingBox!.max.y, z: geometry.boundingBox!.max.z },
+          },
+        });
+      }
+    } catch (err) {
+      console.error('Error parsing PLY file:', err);
+      alert('Failed to parse PLY file. Please ensure it is a valid ASCII or binary .ply file.');
+    }
+  };
 
-  const readyLayers = layers.filter(l => l.status === 'READY' && l.drive_file_id);
+  const loadPlyFromUrl = async (relOrAbsUrl: string, displayName: string) => {
+    setLoadingPly(true);
+    try {
+      const fullUrl = relOrAbsUrl.startsWith('http') ? relOrAbsUrl : `${API_URL}/${relOrAbsUrl}`;
+      const res = await fetch(fullUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buffer = await res.arrayBuffer();
+      parseAndLoadBuffer(buffer, displayName, true);
+    } catch (err) {
+      console.warn('Could not load PLY from URL:', err);
+    } finally {
+      setLoadingPly(false);
+    }
+  };
 
-  // ── Build Three.js scene ─────────────────────────────────────────────
+  // Fetch list of server PLY files for this project
+  useEffect(() => {
+    if (!projectId) return;
+    axios.get(`/api/uploads/project/${projectId}/ply-files`)
+      .then(res => {
+        const list: ServerPlyItem[] = res.data || [];
+        setServerPlyList(list);
+        if (list.length > 0 && !selectedServerPly && !fileName) {
+          const def = list.find(i => i.is_default) || list[0];
+          setSelectedServerPly(def.url);
+          loadPlyFromUrl(def.url, def.filename);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to fetch server PLY list:', err);
+      });
+  }, [projectId]);
+
+  // Fallback to pointCloudUrl if provided and no specific server ply selected yet
+  useEffect(() => {
+    if (pointCloudUrl && !selectedServerPly && !fileName) {
+      loadPlyFromUrl(pointCloudUrl, 'point_cloud.ply (server)');
+    }
+  }, [pointCloudUrl]);
+
+  // ── Local file upload handler ────────────────────────────────────────────
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const contents = event.target?.result as ArrayBuffer;
+      const loader = new PLYLoader();
+      try {
+        const geometry = loader.parse(contents);
+        geometry.computeBoundingSphere();
+        geometry.center();
+        setLoadedGeometry(geometry);
+        setServerLoaded(false);
+        setRenderMode('points');
+        // Expose geometry to parent for volume calculation
+        if (onGeometryLoaded) {
+          geometry.computeBoundingBox();
+          const pos = geometry.attributes.position;
+          onGeometryLoaded({
+            vertices: pos ? (pos.array as Float32Array) : new Float32Array(),
+            boundingBox: {
+              min: { x: geometry.boundingBox!.min.x, y: geometry.boundingBox!.min.y, z: geometry.boundingBox!.min.z },
+              max: { x: geometry.boundingBox!.max.x, y: geometry.boundingBox!.max.y, z: geometry.boundingBox!.max.z },
+            },
+          });
+        }
+      } catch (err) {
+        console.error('Error parsing PLY file:', err);
+        alert('Failed to parse PLY file. Please ensure it is a valid ASCII or binary .ply file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // ── Three.js Scene ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mountRef.current) return;
-    const el = mountRef.current;
-    const { clientWidth: w, clientHeight: h } = el;
 
-    const scene    = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a1a12);
-    sceneRef.current = scene;
+    const width = mountRef.current.clientWidth;
+    const height = mountRef.current.clientHeight;
 
-    const camera = new THREE.PerspectiveCamera(60, w / h, 0.001, 100000);
-    camera.position.set(0, 30, 60);
-    cameraRef.current = camera;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#F8FFF9'); // Light mint — clear point cloud visibility
+
+    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+    camera.position.set(0, 15, 25);
+    camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(w, h);
+    renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    el.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
+    mountRef.current.appendChild(renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controlsRef.current = controls;
+    // Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+    dLight1.position.set(10, 20, 10);
+    scene.add(dLight1);
+    const dLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+    dLight2.position.set(-10, -10, -10);
+    scene.add(dLight2);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-    dir.position.set(10, 30, 10);
-    scene.add(dir);
+    let pointsGeometry: THREE.BufferGeometry;
+    let meshGeometry: THREE.BufferGeometry | undefined;
+    let pointsMaterial: THREE.PointsMaterial;
+    let meshMaterial: THREE.MeshStandardMaterial;
+    let activeObject: THREE.Object3D;
+    let pointCount = 6000;
+
+    if (loadedGeometry) {
+      // ── Loaded PLY geometry ────────────────────────────────
+      pointsGeometry = loadedGeometry;
+      const posAttr = pointsGeometry.getAttribute('position');
+      if (posAttr) pointCount = posAttr.count;
+
+      const hasColors = !!pointsGeometry.getAttribute('color');
+      pointsMaterial = new THREE.PointsMaterial({
+        size: 0.12,
+        vertexColors: hasColors,
+        color: hasColors ? undefined : 0x10B981, // Emerald fallback
+        transparent: true,
+        opacity: 0.92,
+      });
+      meshMaterial = new THREE.MeshStandardMaterial({
+        color: 0x059669,
+        wireframe: true,
+        roughness: 0.5,
+        metalness: 0.1,
+      });
+
+      activeObject = renderMode === 'points'
+        ? new THREE.Points(pointsGeometry, pointsMaterial)
+        : new THREE.Mesh(pointsGeometry, meshMaterial);
+      scene.add(activeObject);
+
+    } else {
+      // ── Mock Emerald Survey Terrain ────────────────────────
+      pointsGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(pointCount * 3);
+      const colors = new Float32Array(pointCount * 3);
+
+      for (let i = 0; i < pointCount; i++) {
+        const x = (Math.random() - 0.5) * 20;
+        const z = (Math.random() - 0.5) * 20;
+        let y = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 2;
+
+        if (Math.abs(x) < 8 && Math.abs(z) < 8) {
+          const gridX = Math.floor(x / 2) * 2;
+          const gridZ = Math.floor(z / 2) * 2;
+          if ((gridX + gridZ) % 4 === 0) y += 0.8;
+        }
+
+        positions[i * 3]     = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = z;
+
+        // Emerald → Amber gradient based on height
+        const ratio = (y + 2) / 4;
+        colors[i * 3]     = ratio * 0.95 + 0.05; // R (amber highlights)
+        colors[i * 3 + 1] = 0.72 - ratio * 0.25; // G (green to gold)
+        colors[i * 3 + 2] = ratio * 0.05;         // B (minimal)
+      }
+
+      pointsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      pointsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      pointsMaterial = new THREE.PointsMaterial({
+        size: 0.18,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85,
+      });
+
+      meshGeometry = new THREE.PlaneGeometry(20, 20, 40, 40);
+      meshGeometry.rotateX(-Math.PI / 2);
+      const posAttrM = meshGeometry.attributes.position;
+      for (let i = 0; i < posAttrM.count; i++) {
+        const x = posAttrM.getX(i);
+        const z = posAttrM.getZ(i);
+        let y = Math.sin(x * 0.4) * Math.cos(z * 0.4) * 2;
+        if (Math.abs(x) < 8 && Math.abs(z) < 8) {
+          const gridX = Math.floor(x / 2) * 2;
+          const gridZ = Math.floor(z / 2) * 2;
+          if ((gridX + gridZ) % 4 === 0) y += 0.8;
+        }
+        posAttrM.setY(i, y);
+      }
+      meshGeometry.computeVertexNormals();
+
+      meshMaterial = new THREE.MeshStandardMaterial({
+        color: 0x059669,
+        wireframe: true,
+      });
+
+      activeObject = renderMode === 'points'
+        ? new THREE.Points(pointsGeometry, pointsMaterial)
+        : new THREE.Mesh(meshGeometry, meshMaterial);
+      scene.add(activeObject);
+    }
+
+    // Animation loop
+    let animationId: number;
+    let time = 0;
 
     const animate = () => {
-      animFrameRef.current = requestAnimationFrame(animate);
-      controls.update();
+      animationId = requestAnimationFrame(animate);
+      time += 0.005 * rotationSpeed;
+      activeObject.rotation.y = time;
+      setStats({
+        points: pointCount,
+        cameraPitch: Math.round(camera.position.y * 3),
+        cameraYaw: Math.round(time * (180 / Math.PI)) % 360,
+      });
       renderer.render(scene, camera);
     };
     animate();
 
-    const onResize = () => {
-      const { clientWidth: nw, clientHeight: nh } = el;
-      camera.aspect = nw / nh;
+    const handleResize = () => {
+      if (!mountRef.current) return;
+      const w = mountRef.current.clientWidth;
+      const h = mountRef.current.clientHeight;
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(nw, nh);
+      renderer.setSize(w, h);
     };
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', handleResize);
+
     return () => {
-      cancelAnimationFrame(animFrameRef.current);
-      window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', handleResize);
+      if (mountRef.current && renderer.domElement) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        mountRef.current.removeChild(renderer.domElement);
+      }
+      pointsGeometry?.dispose();
+      pointsMaterial?.dispose();
+      meshGeometry?.dispose();
+      meshMaterial?.dispose();
       renderer.dispose();
-      el.removeChild(renderer.domElement);
     };
-  }, []);
-
-  // ── Load PLY files ───────────────────────────────────────────────────
-  useEffect(() => {
-    if (readyLayers.length === 0 || !sceneRef.current) return;
-    setLoading(true);
-    setProgress(0);
-    const scene = sceneRef.current;
-
-    // Remove old objects
-    scene.children
-      .filter(c => c.name.startsWith('ply_'))
-      .forEach(c => scene.remove(c));
-
-    const loader = new PLYLoader();
-    let loaded = 0;
-    const meshResults: LoadedMesh[] = [];
-    let centroidOffset: THREE.Vector3 | null = null;
-    let totalPoints = 0;
-
-    const loadAll = async () => {
-      for (let idx = 0; idx < readyLayers.length; idx++) {
-        const layer = readyLayers[idx];
-        const url   = `/api/projects/proxy-drive?file_id=${layer.drive_file_id}`;
-        try {
-          const resp = await fetch(url);
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const buffer = await resp.arrayBuffer();
-          const geo    = loader.parse(buffer);
-          geo.computeBoundingBox();
-
-          // ── Centroid drift fix ──────────────────────────────────────
-          // Compute centroid from first (primary) PLY and apply to all
-          if (idx === 0 && geo.boundingBox) {
-            centroidOffset = new THREE.Vector3();
-            geo.boundingBox.getCenter(centroidOffset);
-          }
-          if (centroidOffset) {
-            const posAttr = geo.getAttribute('position');
-            const arr = posAttr.array as Float32Array;
-            for (let i = 0; i < arr.length; i += 3) {
-              arr[i]     -= centroidOffset.x;
-              arr[i + 1] -= centroidOffset.y;
-              arr[i + 2] -= centroidOffset.z;
-            }
-            (posAttr as THREE.BufferAttribute).needsUpdate = true;
-            geo.computeBoundingBox();
-            geo.computeBoundingSphere();
-          }
-
-          const hasColors = !!geo.getAttribute('color');
-          totalPoints += (geo.getAttribute('position')?.count ?? 0);
-
-          let obj: THREE.Object3D;
-          if (renderMode === 'points') {
-            const mat = new THREE.PointsMaterial({
-              size: 0.1, vertexColors: hasColors,
-              color: hasColors ? undefined : 0x10B981,
-              transparent: true, opacity: 0.9,
-            });
-            obj = new THREE.Points(geo, mat);
-          } else {
-            obj = new THREE.Mesh(geo,
-              new THREE.MeshStandardMaterial({ color: 0x059669, wireframe: false }));
-          }
-          obj.name = `ply_${layer.id}`;
-          scene.add(obj);
-          meshResults.push({ name: layer.name, object: obj, visible: true, pointSize: 0.1 });
-        } catch (e) {
-          console.warn(`Could not load PLY layer ${layer.name}:`, e);
-        }
-        loaded++;
-        setProgress(Math.round((loaded / readyLayers.length) * 100));
-      }
-
-      setPointCount(totalPoints);
-      setLoadedMeshes(meshResults);
-      setLoading(false);
-
-      // Fit camera to scene
-      if (cameraRef.current && controlsRef.current) {
-        const box = new THREE.Box3();
-        scene.children.filter(c => c.name.startsWith('ply_')).forEach(c => box.expandByObject(c));
-        if (!box.isEmpty()) {
-          const center = box.getCenter(new THREE.Vector3());
-          const size   = box.getSize(new THREE.Vector3()).length();
-          cameraRef.current.position.set(center.x, center.y + size * 0.5, center.z + size);
-          controlsRef.current.target.copy(center);
-          controlsRef.current.update();
-        }
-      }
-    };
-
-    loadAll();
-  }, [readyLayers.map(l => l.id).join(','), renderMode]);
-
-  // ── Toggle visibility ────────────────────────────────────────────────
-  const toggleVisibility = (idx: number) => {
-    setLoadedMeshes(prev => {
-      const updated = [...prev];
-      updated[idx] = { ...updated[idx], visible: !updated[idx].visible };
-      updated[idx].object.visible = updated[idx].visible;
-      return updated;
-    });
-  };
+  }, [renderMode, rotationSpeed, loadedGeometry]);
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 260px)', minHeight: 480 }}>
-      <Box ref={mountRef} sx={{ width: '100%', height: '100%' }} />
-
+    <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 280px)', minHeight: 480, overflow: 'hidden', borderRadius: 3, border: '1px solid #A7F3D0', bgcolor: '#F8FFF9' }}>
       {/* Loading overlay */}
-      {loading && (
-        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-                   justifyContent: 'center', bgcolor: 'rgba(10,26,18,0.85)', zIndex: 20 }}>
-          <Stack alignItems="center" spacing={2}>
-            <CircularProgress sx={{ color: '#10B981' }} size={56} />
-            <Typography sx={{ color: '#fff', fontFamily: 'Outfit' }}>
-              Loading Point Cloud… {progress}%
-            </Typography>
-          </Stack>
+      {/* Loading overlay */}
+      {serverLoading && (
+        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(15,26,20,0.85)', zIndex: 20, borderRadius: 3 }}>
+          <Typography sx={{ color: '#10B981', fontFamily: 'Outfit', fontWeight: 700, fontSize: '1rem' }}>
+            ⟳ Loading point cloud from server…
+          </Typography>
         </Box>
       )}
 
-      {/* Layer panel */}
-      <Paper elevation={6} sx={{
-        position: 'absolute', top: 12, right: 12, zIndex: 10, minWidth: 220,
-        p: 2, borderRadius: 3,
-        bgcolor: 'rgba(10,26,18,0.92)', backdropFilter: 'blur(8px)',
-        border: '1px solid rgba(16,185,129,0.2)',
-      }}>
-        <Stack spacing={1.5}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <LayersIcon sx={{ color: '#10B981', fontSize: 18 }} />
-            <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 700,
-                textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              Point Cloud Layers
+      {/* 3D Canvas */}
+      <Box ref={mountRef} sx={{ width: '100%', height: '100%' }} />
+
+      {/* Floating Control Panel */}
+      <Paper
+        elevation={3}
+        sx={{
+          position: 'absolute', top: 20, right: 20,
+          p: 2.5,
+          display: 'flex', flexDirection: 'column', gap: 2.2,
+          zIndex: 10, width: 270, borderRadius: '14px',
+          bgcolor: 'rgba(255,255,255,0.92)',
+          border: '1px solid #D1FAE5',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 4px 24px rgba(16,185,129,0.12)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontFamily: 'Outfit', fontWeight: 800, color: '#0F172A', flexGrow: 1 }}>
+            3D Point Cloud Panel
+          </Typography>
+          {serverLoaded && (
+            <Chip icon={<CloudDownloadRoundedIcon />} label="Server" size="small"
+              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, bgcolor: 'rgba(16,185,129,0.12)', color: '#059669', '& .MuiChip-icon': { color: '#059669', fontSize: 12 } }}
+            />
+          )}
+        </Box>
+
+        {/* Admin Pipeline .PLY Dropdown */}
+        {serverPlyList.length > 0 && (
+          <Box>
+            <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Select .PLY from Admin Pipeline
+            </Typography>
+            <FormControl fullWidth size="small">
+              <Select
+                value={selectedServerPly}
+                displayEmpty
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedServerPly(val);
+                  const found = serverPlyList.find(i => i.url === val);
+                  if (found) {
+                    loadPlyFromUrl(found.url, found.filename);
+                  }
+                }}
+                disabled={loadingPly}
+                sx={{
+                  borderRadius: '10px',
+                  fontSize: '0.82rem',
+                  bgcolor: '#FFFFFF',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#A7F3D0' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#10B981' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#10B981' },
+                }}
+              >
+                <MenuItem value="" disabled>
+                  <em>Choose pipeline .PLY file…</em>
+                </MenuItem>
+                {serverPlyList.map((item) => (
+                  <MenuItem key={item.filename} value={item.url} sx={{ fontSize: '0.82rem' }}>
+                    ☁️ {item.filename} ({(item.filesize / (1024 * 1024)).toFixed(1)} MB)
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {loadingPly && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                <CircularProgress size={16} sx={{ color: '#10B981' }} />
+                <Typography variant="caption" sx={{ color: '#64748B' }}>Loading point cloud…</Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {/* Local .PLY Upload */}
+        <Box>
+          <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {serverPlyList.length > 0 ? 'Or Upload Local .PLY' : 'Upload Local .PLY'}
+          </Typography>
+          <Button
+            variant="outlined"
+            component="label"
+            fullWidth
+            startIcon={<CloudUploadIcon />}
+            sx={{
+              borderRadius: '10px', textTransform: 'none',
+              borderColor: '#A7F3D0', color: '#059669', fontSize: '0.82rem',
+              '&:hover': { borderColor: '#10B981', bgcolor: 'rgba(16,185,129,0.06)' },
+            }}
+          >
+            Choose .PLY File
+            <input type="file" accept=".ply" hidden onChange={handleFileChange} />
+          </Button>
+          {fileName && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.8, color: '#10B981', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              ✓ {fileName}
+            </Typography>
+          )}
+        </Box>
+
+        {/* Render Mode Toggle */}
+        <Box>
+          <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, display: 'block', mb: 0.8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Representation
+          </Typography>
+          <ToggleButtonGroup
+            value={renderMode} exclusive
+            onChange={(_, val) => val && setRenderMode(val)}
+            size="small" fullWidth
+            sx={{ '& .MuiToggleButton-root': { borderRadius: '8px', py: 0.8, color: '#475569', borderColor: '#D1FAE5', '&.Mui-selected': { bgcolor: 'rgba(16,185,129,0.15)', color: '#059669', borderColor: '#10B981' } } }}
+          >
+            <ToggleButton value="points">
+              <Grid3x3Icon fontSize="small" sx={{ mr: 0.5 }} /> Points
+            </ToggleButton>
+            <ToggleButton value="mesh">
+              <TerrainIcon fontSize="small" sx={{ mr: 0.5 }} /> Wireframe
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+
+        {/* Rotation Speed */}
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Rotation Speed
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#059669', fontWeight: 700 }}>
+              {rotationSpeed.toFixed(1)}x
             </Typography>
           </Box>
+          <Slider
+            value={rotationSpeed}
+            onChange={(_, val) => setRotationSpeed(val as number)}
+            min={0} max={2} step={0.1} size="small"
+            sx={{ color: '#10B981', '& .MuiSlider-rail': { bgcolor: 'rgba(16,185,129,0.2)' } }}
+          />
+        </Box>
+      </Paper>
 
-          <ToggleButtonGroup value={renderMode} exclusive size="small"
-            onChange={(_, v) => v && setRenderMode(v)}
-            sx={{ '& .MuiToggleButton-root': { color: '#64748B', borderColor: '#334155' },
-                  '& .Mui-selected': { color: '#10B981 !important', bgcolor: 'rgba(16,185,129,0.1) !important' } }}>
-            <ToggleButton value="points"><ScatterPlotIcon fontSize="small" /></ToggleButton>
-            <ToggleButton value="mesh"><ViewInArIcon fontSize="small" /></ToggleButton>
-          </ToggleButtonGroup>
-
-          <Divider sx={{ borderColor: 'rgba(16,185,129,0.15)' }} />
-
-          {loadedMeshes.length === 0 && !loading && (
-            <Typography variant="caption" sx={{ color: '#475569' }}>
-              {readyLayers.length === 0 ? 'No PLY layers attached to this project.' : 'Loading…'}
-            </Typography>
-          )}
-
-          {loadedMeshes.map((m, idx) => (
-            <FormControlLabel key={idx}
-              control={<Switch size="small" checked={m.visible} color="success"
-                onChange={() => toggleVisibility(idx)} />}
-              label={<Typography variant="caption" sx={{ color: '#CBD5E1' }}>{m.name}</Typography>}
-              sx={{ m: 0 }} />
-          ))}
-
-          {pointCount > 0 && (
-            <>
-              <Divider sx={{ borderColor: 'rgba(16,185,129,0.15)' }} />
-              <Typography variant="caption" sx={{ color: '#475569', fontFamily: 'monospace' }}>
-                {pointCount.toLocaleString()} vertices
-              </Typography>
-            </>
-          )}
+      {/* Stats Overlay */}
+      <Paper
+        elevation={0}
+        sx={{
+          position: 'absolute', bottom: 20, left: 20,
+          p: 1.5, zIndex: 10, borderRadius: '10px',
+          bgcolor: 'rgba(10,26,18,0.9)',
+          border: '1px solid rgba(16,185,129,0.2)',
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <Stack spacing={0.5}>
+          <Typography variant="caption" sx={{ color: '#4B5563', fontFamily: 'monospace', fontSize: '0.72rem' }}>
+            RENDERER: <span style={{ color: '#E5E7EB', fontWeight: 700 }}>WebGL 2.0 (Three.js)</span>
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#4B5563', fontFamily: 'monospace', fontSize: '0.72rem' }}>
+            VERTICES: <span style={{ color: '#10B981', fontWeight: 700 }}>{stats.points.toLocaleString()}</span>
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#4B5563', fontFamily: 'monospace', fontSize: '0.72rem' }}>
+            CAMERA YAW: <span style={{ color: '#F59E0B', fontWeight: 700 }}>{stats.cameraYaw}°</span>
+          </Typography>
         </Stack>
       </Paper>
     </Box>

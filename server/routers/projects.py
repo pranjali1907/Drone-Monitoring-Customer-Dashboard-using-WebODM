@@ -1,353 +1,173 @@
-import datetime
-import os
-import json
-import subprocess
-from typing import List, Optional
-import requests as http_requests
-
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List, Optional
+import json
+import datetime
+from datetime import date
 
 from server.database import get_db
-from server.models import Project, ProjectLayer, Measurement, User
-from server.schemas import (
-    ProjectCreate, ProjectUpdate, ProjectResponse,
-    MeasurementCreate, MeasurementResponse,
-    ProjectLayerResponse,
-)
-from server import auth
-from server.services.drive_loader import extract_drive_file_id, stream_drive_file
-from server.services.raster_worker import process_raster_layer
+import server.models as models
+import server.schemas as schemas
+import server.auth as auth
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
+@router.get("", response_model=List[schemas.ProjectResponse])
+def get_projects(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if current_user.role == "admin":
+        return db.query(models.Project).all()
+    else:
+        # Return assigned projects or all if client has access
+        return current_user.assigned_projects if current_user.assigned_projects else db.query(models.Project).all()
 
-# ── Helper ───────────────────────────────────────────────────────────────
-def _get_project_or_404(project_id: int, db: Session) -> Project:
-    project = db.query(Project).filter(Project.id == project_id).first()
+@router.post("", response_model=schemas.ProjectResponse)
+def create_project(project_in: schemas.ProjectCreate, current_admin: models.User = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+    # 1. Parse survey date safely
+    survey_dt = None
+    if project_in.survey_date:
+        if isinstance(project_in.survey_date, date):
+            survey_dt = project_in.survey_date
+        elif isinstance(project_in.survey_date, str) and project_in.survey_date.strip():
+            s = project_in.survey_date.strip()
+            for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    survey_dt = datetime.datetime.strptime(s, fmt).date()
+                    break
+                except Exception:
+                    pass
+
+    # 2. Parse boundary geometry safely for PostGIS / SQLite
+    boundary_val = None
+    if project_in.boundary:
+        try:
+            if isinstance(project_in.boundary, str):
+                b_dict = json.loads(project_in.boundary)
+            else:
+                b_dict = project_in.boundary
+
+            if models.has_geoalchemy and not models.is_sqlite:
+                try:
+                    from shapely.geometry import shape
+                    from geoalchemy2.shape import from_shape
+                    sh = shape(b_dict)
+                    boundary_val = from_shape(sh, srid=4326)
+                except Exception as g_err:
+                    print(f"[WARN] PostGIS shape conversion notice: {g_err}")
+                    boundary_val = None
+            else:
+                boundary_val = json.dumps(b_dict)
+        except Exception as b_err:
+            print(f"[WARN] Boundary GeoJSON parse error: {b_err}")
+            boundary_val = None
+
+    new_project = models.Project(
+        name=project_in.name,
+        description=project_in.description,
+        location=project_in.location,
+        latitude=project_in.latitude,
+        longitude=project_in.longitude,
+        boundary=boundary_val,
+        survey_date=survey_dt,
+        status="draft"
+    )
+    db.add(new_project)
+    db.commit()
+    db.refresh(new_project)
+    
+    # Audit logging
+    try:
+        log = models.ActivityLog(
+            user_id=current_admin.id if current_admin else None,
+            action="CREATE_PROJECT",
+            details=f"Created project: {new_project.name} (ID: {new_project.id})"
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        pass
+    
+    return new_project
+
+@router.get("/{project_id}", response_model=schemas.ProjectDetailResponse)
+def get_project_details(project_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
 
-
-# ── List Projects ─────────────────────────────────────────────────────────
-@router.get("", response_model=List[ProjectResponse])
-def list_projects(
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    if current_user.role == "admin":
-        return db.query(Project).order_by(Project.created_at.desc()).all()
-    return current_user.assigned_projects
-
-
-# ── Create Project ────────────────────────────────────────────────────────
-@router.post("", response_model=ProjectResponse, status_code=201)
-def create_project(
-    project_in: ProjectCreate,
-    background_tasks: BackgroundTasks,
-    _admin: User = Depends(auth.get_current_admin),
-    db: Session = Depends(get_db),
-):
-    # Parse survey date
-    survey_dt = None
-    if project_in.survey_date:
-        try:
-            survey_dt = datetime.date.fromisoformat(project_in.survey_date)
-        except ValueError:
-            pass
-
-    project = Project(
-        name=project_in.name,
-        description=project_in.description,
-        location=project_in.location,
-        survey_date=survey_dt,
-        latitude=project_in.latitude,
-        longitude=project_in.longitude,
-        boundary_wkt=project_in.boundary_wkt,
-        youtube_before_id=project_in.youtube_before_id,
-        youtube_after_id=project_in.youtube_after_id,
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-
-    # Auto-create RASTER layer if Drive URL given
-    if project_in.raster_drive_url:
-        file_id = extract_drive_file_id(project_in.raster_drive_url)
-        if file_id:
-            layer = ProjectLayer(
-                project_id=project.id,
-                name="Raster Orthomosaic",
-                layer_type="RASTER_TILES",
-                drive_file_id=file_id,
-                drive_url=project_in.raster_drive_url,
-                status="PENDING",
-            )
-            db.add(layer)
-            db.commit()
-            db.refresh(layer)
-            background_tasks.add_task(process_raster_layer, layer.id)
-
-    # Auto-create PLY layers if Drive URLs given
-    if project_in.ply_drive_urls:
-        for idx, ply_url in enumerate(project_in.ply_drive_urls):
-            file_id = extract_drive_file_id(ply_url)
-            if file_id:
-                ply_layer = ProjectLayer(
-                    project_id=project.id,
-                    name=f"Point Cloud {idx + 1}",
-                    layer_type="POINT_CLOUD_PLY",
-                    drive_file_id=file_id,
-                    drive_url=ply_url,
-                    status="READY",  # PLY is streamed on demand — no preprocessing needed
-                )
-                db.add(ply_layer)
-        db.commit()
-
-    db.refresh(project)
-    return project
-
-
-# ── Get Project ───────────────────────────────────────────────────────────
-@router.get("/{project_id}", response_model=ProjectResponse)
-def get_project(
-    project_id: int,
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    project = _get_project_or_404(project_id, db)
-    if current_user.role != "admin" and project not in current_user.assigned_projects:
-        raise HTTPException(status_code=403, detail="Access denied")
-    return project
-
-
-# ── Update Project ────────────────────────────────────────────────────────
-@router.put("/{project_id}", response_model=ProjectResponse)
-def update_project(
-    project_id: int,
-    project_in: ProjectUpdate,
-    _admin: User = Depends(auth.get_current_admin),
-    db: Session = Depends(get_db),
-):
-    project = _get_project_or_404(project_id, db)
-    for field, value in project_in.model_dump(exclude_unset=True).items():
-        if field == "survey_date" and value:
-            try:
-                value = datetime.date.fromisoformat(value)
-            except ValueError:
-                continue
+@router.put("/{project_id}", response_model=schemas.ProjectResponse)
+def update_project(project_id: int, project_in: schemas.ProjectUpdate, current_admin: models.User = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    update_data = project_in.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        if field == "boundary" and value:
+            continue  # preserve geometry
         setattr(project, field, value)
+        
     db.commit()
     db.refresh(project)
     return project
 
-
-# ── Delete Project ────────────────────────────────────────────────────────
-@router.delete("/{project_id}", status_code=204)
-def delete_project(
-    project_id: int,
-    _admin: User = Depends(auth.get_current_admin),
-    db: Session = Depends(get_db),
-):
-    project = _get_project_or_404(project_id, db)
+@router.delete("/{project_id}", status_code=status.HTTP_200_OK)
+def delete_project(project_id: int, current_admin: models.User = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
     db.delete(project)
     db.commit()
 
-
-# ── Assign Client ─────────────────────────────────────────────────────────
-@router.post("/{project_id}/assign/{user_id}", status_code=204)
-def assign_client(
-    project_id: int,
-    user_id: int,
-    _admin: User = Depends(auth.get_current_admin),
-    db: Session = Depends(get_db),
-):
-    project = _get_project_or_404(project_id, db)
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if user not in project.assigned_clients:
-        project.assigned_clients.append(user)
-        db.commit()
-
-
-# ── Layers ────────────────────────────────────────────────────────────────
-@router.get("/{project_id}/layers", response_model=List[ProjectLayerResponse])
-def get_layers(
-    project_id: int,
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    _get_project_or_404(project_id, db)
-    return db.query(ProjectLayer).filter(ProjectLayer.project_id == project_id).all()
-
-
-@router.post("/{project_id}/ingest-raster", status_code=202)
-def ingest_raster(
-    project_id: int,
-    drive_url: str = Query(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    _admin: User = Depends(auth.get_current_admin),
-    db: Session = Depends(get_db),
-):
-    """Manually trigger async GDAL ingestion for a raster Drive URL."""
-    _get_project_or_404(project_id, db)
-    file_id = extract_drive_file_id(drive_url)
-    if not file_id:
-        raise HTTPException(status_code=400, detail="Invalid Google Drive URL")
-
-    layer = ProjectLayer(
-        project_id=project_id,
-        name="Raster Orthomosaic",
-        layer_type="RASTER_TILES",
-        drive_file_id=file_id,
-        drive_url=drive_url,
-        status="PENDING",
-    )
-    db.add(layer)
-    db.commit()
-    db.refresh(layer)
-    background_tasks.add_task(process_raster_layer, layer.id)
-    return {"message": "Ingestion started", "layer_id": layer.id}
-
-
-# ── Google Drive Streaming Proxy ──────────────────────────────────────────
-@router.get("/proxy-drive")
-def proxy_drive(file_id: str = Query(...)):
-    """Stream a Google Drive file (PLY point cloud etc.) in 1 MB chunks."""
-    session = http_requests.Session()
-    url = "https://docs.google.com/uc?export=download"
-    resp = session.get(url, params={"id": file_id}, stream=True, timeout=30)
-
-    confirm = None
-    for key, value in resp.cookies.items():
-        if key.startswith("download_warning"):
-            confirm = value
-            break
-
-    if confirm:
-        resp = session.get(url, params={"id": file_id, "confirm": confirm}, stream=True, timeout=60)
-
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="Failed to fetch from Google Drive")
-
-    content_type = resp.headers.get("content-type", "application/octet-stream")
-
-    def chunk_generator():
-        for chunk in resp.iter_content(chunk_size=1024 * 1024):
-            if chunk:
-                yield chunk
-
-    return StreamingResponse(chunk_generator(), media_type=content_type)
-
-
-# ── Auto-Detect GPS Coordinates from .ECW / Raster ─────────────────────────
-@router.post("/detect-coordinates")
-def detect_coordinates(
-    drive_url: str = Query(...),
-    _user: User = Depends(auth.get_current_user),
-):
-    """
-    Inspect a Google Drive .ecw or .tif raster file header and extract exact GPS centroid and extent.
-    """
-    file_id = extract_drive_file_id(drive_url)
-    if not file_id:
-        raise HTTPException(status_code=400, detail="Invalid Google Drive URL")
-
-    dest = f"/tmp/detect_{file_id}"
-    try:
-        session = http_requests.Session()
-        download_url = "https://docs.google.com/uc?export=download"
-        resp = session.get(download_url, params={"id": file_id}, stream=True, timeout=30)
-        confirm = None
-        for k, v in resp.cookies.items():
-            if k.startswith("download_warning"):
-                confirm = v
-                break
-        if confirm:
-            resp = session.get(download_url, params={"id": file_id, "confirm": confirm}, stream=True, timeout=30)
-
-        with open(dest, "wb") as f:
-            bytes_written = 0
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    f.write(chunk)
-                    bytes_written += len(chunk)
-                    if bytes_written >= 40 * 1024 * 1024:
-                        break
-
-        info_res = subprocess.run(["gdalinfo", "-json", dest], capture_output=True, text=True, timeout=30)
-        if info_res.returncode == 0:
-            meta = json.loads(info_res.stdout)
-            wgs84 = meta.get("wgs84Extent", {})
-            coords = wgs84.get("coordinates", [[]])[0]
-            if coords and len(coords) >= 4:
-                avg_lon = sum(c[0] for c in coords) / len(coords)
-                avg_lat = sum(c[1] for c in coords) / len(coords)
-                return {
-                    "latitude": round(avg_lat, 6),
-                    "longitude": round(avg_lon, 6),
-                    "boundary": wgs84
-                }
-        raise HTTPException(status_code=422, detail="Raster header could not be fully parsed in preview. Coordinates will auto-extract during background processing.")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to inspect raster: {str(e)}")
-    finally:
-        if os.path.exists(dest):
+    # Physically delete project directories from disk / cloud storage
+    import os, shutil
+    from server.config import settings
+    for base_dir in [settings.UPLOAD_DIR, settings.PROCESSED_DIR, settings.REPORTS_DIR]:
+        folder_path = os.path.join(base_dir, f"project_{project_id}")
+        if os.path.exists(folder_path):
             try:
-                os.remove(dest)
-            except Exception:
-                pass
+                shutil.rmtree(folder_path)
+            except Exception as e:
+                print(f"[WARN] Could not remove folder {folder_path}: {e}")
+    
+    try:
+        log = models.ActivityLog(
+            user_id=current_admin.id if current_admin else None,
+            action="DELETE_PROJECT",
+            details=f"Deleted project ID: {project_id}"
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        pass
+        
+    return {"message": f"Project {project_id} deleted successfully"}
 
+@router.post("/{project_id}/assign/{client_id}")
+def assign_client_to_project(project_id: int, client_id: int, current_admin: models.User = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    client = db.query(models.User).filter(models.User.id == client_id, models.User.role == "client").first()
+    if not project or not client:
+        raise HTTPException(status_code=404, detail="Project or client user not found")
+    if client not in project.assigned_clients:
+        project.assigned_clients.append(client)
+        db.commit()
+    return {"message": f"Assigned {client.email} to project {project.name}"}
 
-# ── Measurements ──────────────────────────────────────────────────────────
-@router.get("/{project_id}/measurements", response_model=List[MeasurementResponse])
-def list_measurements(
-    project_id: int,
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    _get_project_or_404(project_id, db)
-    return db.query(Measurement).filter(Measurement.project_id == project_id).all()
+@router.post("/{project_id}/unassign/{client_id}")
+def unassign_client_from_project(project_id: int, client_id: int, current_admin: models.User = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    client = db.query(models.User).filter(models.User.id == client_id).first()
+    if not project or not client:
+        raise HTTPException(status_code=404, detail="Project or client user not found")
+    if client in project.assigned_clients:
+        project.assigned_clients.remove(client)
+        db.commit()
+    return {"message": f"Revoked access for {client.email} from project {project.name}"}
 
-
-@router.post("/{project_id}/measurements", response_model=MeasurementResponse, status_code=201)
-def create_measurement(
-    project_id: int,
-    meas_in: MeasurementCreate,
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    _get_project_or_404(project_id, db)
-    meas = Measurement(
-        project_id=project_id,
-        user_id=current_user.id,
-        name=meas_in.name,
-        measurement_type=meas_in.measurement_type,
-        value=meas_in.value,
-        geom_geojson=meas_in.geom_geojson,
-    )
-    db.add(meas)
-    db.commit()
-    db.refresh(meas)
-    return meas
-
-
-@router.delete("/{project_id}/measurements/{meas_id}", status_code=204)
-def delete_measurement(
-    project_id: int,
-    meas_id: int,
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    meas = db.query(Measurement).filter(
-        Measurement.id == meas_id, Measurement.project_id == project_id
-    ).first()
-    if not meas:
-        raise HTTPException(status_code=404, detail="Measurement not found")
-    db.delete(meas)
-    db.commit()
+@router.post("/cleanup-orphaned-data")
+def trigger_orphan_data_cleanup():
+    from server.main import cleanup_orphaned_project_folders
+    count = cleanup_orphaned_project_folders()
+    return {"message": f"Successfully cleaned up {count} orphaned project data storage folders."}

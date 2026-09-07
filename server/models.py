@@ -1,6 +1,6 @@
 import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, Float, Date, DateTime,
+    Column, Integer, BigInteger, String, Text, Float, Date, DateTime,
     ForeignKey, Table, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
@@ -57,6 +57,7 @@ class Project(Base):
         "User", secondary=client_assignments, back_populates="assigned_projects"
     )
     layers       = relationship("ProjectLayer", back_populates="project", cascade="all, delete-orphan")
+    images       = relationship("DroneImage",   back_populates="project", cascade="all, delete-orphan")
     measurements = relationship("Measurement",  back_populates="project", cascade="all, delete-orphan")
 
 
@@ -73,9 +74,33 @@ class ProjectLayer(Base):
     tile_url_pattern = Column(Text,       nullable=True)    # e.g. /tiles/{layer_id}/{z}/{x}/{y}.png
     status          = Column(String(50),  nullable=False, default="PENDING")  # PENDING|PROCESSING|READY|FAILED
     error_message   = Column(Text,        nullable=True)
+    file_size_bytes = Column(BigInteger,  nullable=True)
+    crs             = Column(String(100), nullable=True)
+    resolution_cm   = Column(Float,       nullable=True)
+    metadata_json   = Column(Text,        nullable=True)
     created_at      = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
     project = relationship("Project", back_populates="layers")
+
+
+class DroneImage(Base):
+    """Geotagged individual drone survey photo linked to a project."""
+    __tablename__ = "drone_images"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    project_id    = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    filename      = Column(String(255), nullable=False)
+    drive_file_id = Column(String(255), nullable=True)
+    drive_url     = Column(Text,        nullable=True)
+    thumbnail_url = Column(Text,        nullable=True)
+    latitude      = Column(Float,       nullable=True, index=True)
+    longitude     = Column(Float,       nullable=True, index=True)
+    altitude_m    = Column(Float,       nullable=True)
+    heading_deg   = Column(Float,       nullable=True)
+    captured_at   = Column(DateTime(timezone=True), nullable=True)
+    created_at    = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="images")
 
 
 class Measurement(Base):
@@ -93,3 +118,4 @@ class Measurement(Base):
 
     project = relationship("Project",     back_populates="measurements")
     user    = relationship("User",        back_populates="measurements")
+
