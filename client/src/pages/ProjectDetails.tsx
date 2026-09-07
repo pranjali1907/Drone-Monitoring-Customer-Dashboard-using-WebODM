@@ -2,17 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Tabs, Tab, Button, Chip,
-  Grid, CircularProgress, Stack, Alert, Divider, IconButton, Tooltip,
+  CircularProgress, Stack, Alert,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MapIcon from '@mui/icons-material/Map';
 import ViewInArIcon from '@mui/icons-material/ViewInAr';
 import OndemandVideoIcon from '@mui/icons-material/OndemandVideo';
-import EditIcon from '@mui/icons-material/Edit';
 import axios from 'axios';
 import { MapView } from '../components/MapView';
 import ThreeDViewer from '../components/ThreeDViewer';
-import { useNavigate as useNav } from 'react-router-dom';
 
 interface ProjectLayer {
   id: number;

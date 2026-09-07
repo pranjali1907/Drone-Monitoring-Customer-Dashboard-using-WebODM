@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Button, Grid, Paper, Chip, CircularProgress,
-  TextField, InputAdornment, Stack, Alert,
+  TextField, InputAdornment, Stack, Alert, Divider,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -154,10 +154,5 @@ export const Projects: React.FC = () => {
     </Box>
   );
 };
-
-// inline Divider
-const Divider = ({ sx }: { sx?: object }) => (
-  <Box sx={{ height: 1, bgcolor: '#F1F5F9', ...sx }} />
-);
 
 export default Projects;

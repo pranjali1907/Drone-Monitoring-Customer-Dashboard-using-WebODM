@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Box, Button, Slider, Typography, Paper, Stack, Chip,
+  Box, Button, Slider, Typography, Paper, Chip,
   TextField, Divider, IconButton, Tooltip,
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';

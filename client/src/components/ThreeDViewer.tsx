@@ -4,7 +4,7 @@ import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
   Box, Paper, Typography, Stack, Switch, FormControlLabel,
-  Slider, Chip, CircularProgress, ToggleButtonGroup, ToggleButton,
+  CircularProgress, ToggleButtonGroup, ToggleButton, Divider,
 } from '@mui/material';
 import LayersIcon from '@mui/icons-material/Layers';
 import ScatterPlotIcon from '@mui/icons-material/ScatterPlot';

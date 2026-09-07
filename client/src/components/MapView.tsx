@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   MapContainer, TileLayer, Marker, Popup, Polygon, Polyline,
   useMapEvents, useMap,
@@ -6,7 +6,7 @@ import {
 import L from 'leaflet';
 import {
   Box, Button, Paper, Typography, ToggleButtonGroup, ToggleButton,
-  Slider, Stack, Divider, LinearProgress, Chip,
+  Slider, Stack, Divider, Chip,
 } from '@mui/material';
 import axios from 'axios';
 import StraightenIcon from '@mui/icons-material/Straighten';
@@ -14,7 +14,6 @@ import CropFreeIcon from '@mui/icons-material/CropFree';
 import PanToolIcon from '@mui/icons-material/PanTool';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
-import CompareIcon from '@mui/icons-material/Compare';
 
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -55,8 +54,6 @@ const MapClickHandler = ({
 export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude }) => {
   const [rasterLayers, setRasterLayers] = useState<Layer[]>([]);
   const [opacity, setOpacity]           = useState(0.85);
-  const [swipeX, setSwipeX]             = useState(50); // curtain position %
-  const [swipeMode, setSwipeMode]       = useState(false);
   const [tool, setTool]                 = useState<'pan' | 'distance' | 'area'>('pan');
   const [points, setPoints]             = useState<L.LatLng[]>([]);
   const [measureLabel, setMeasureLabel] = useState('');
@@ -165,12 +162,12 @@ export const MapView: React.FC<MapViewProps> = ({ projectId, latitude, longitude
         />
 
         {/* GDAL raster tiles */}
-        {readyLayers.map((layer, idx) => (
+        {readyLayers.map((layer) => (
           <TileLayer
             key={layer.id}
             url={`${layer.tile_url_pattern}`}
             tms={false}
-            opacity={swipeMode && idx > 0 ? 0 : opacity}
+            opacity={opacity}
           />
         ))}
 
