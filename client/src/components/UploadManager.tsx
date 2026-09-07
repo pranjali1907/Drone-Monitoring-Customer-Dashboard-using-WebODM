@@ -12,23 +12,36 @@ interface UploadManagerProps {
 }
 
 export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploadSuccess }) => {
-  const [youtubeLink, setYoutubeLink] = useState('');
-  const [dataLink, setDataLink] = useState('');
+  const [youtubeBefore, setYoutubeBefore] = useState('');
+  const [youtubeAfter, setYoutubeAfter] = useState('');
+  const [rasterLink, setRasterLink] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSaveLinks = async () => {
+    setIsProcessing(true);
     try {
-      const payload = {
-        description: JSON.stringify({ youtubeLink, dataLink })
-      };
-      await axios.put(`/api/projects/${projectId}`, payload);
-      setMessage({ type: 'success', text: 'External data links saved successfully to project.' });
+      // 1. Update basic Project metadata (Youtube IDs)
+      await axios.put(`/api/projects/${projectId}`, {
+        youtube_before_id: youtubeBefore,
+        youtube_after_id: youtubeAfter
+      });
+
+      // 2. Trigger async Raster Ingestion if a Drive link is provided
+      if (rasterLink.includes('drive.google.com')) {
+        await axios.post(`/api/projects/${projectId}/ingest-raster?url=${encodeURIComponent(rasterLink)}`);
+      }
+
+      setMessage({ type: 'success', text: 'External data links saved. GDAL Raster Ingestion started if provided.' });
       setTimeout(() => {
         onUploadSuccess();
         setMessage(null);
-      }, 1500);
+      }, 2500);
     } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to save external links.' });
+      console.error(error);
+      setMessage({ type: 'error', text: 'Failed to save external links or start ingestion.' });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -37,7 +50,7 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="h5" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', flexGrow: 1 }}>
-          External Data Links
+          External Data Links & Processing
         </Typography>
       </Box>
 
@@ -47,50 +60,62 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
         </Alert>
       )}
 
-      {/* ── Section: Processed Data Link ──────────────────────────────── */}
+      {/* Raster Data Link */}
       <Paper
         elevation={0}
         sx={{ p: 3, border: '1px solid #D1FAE5', borderRadius: '14px', bgcolor: '#F0FDF4' }}
       >
         <Typography variant="subtitle1" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <StorageIcon sx={{ color: '#10B981' }} /> Processed Data Location (.ECW, etc.)
+          <StorageIcon sx={{ color: '#10B981' }} /> Ingest Raster Orthomosaic (.ECW / .TIF)
         </Typography>
         <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
-          Provide the <strong>Google Drive</strong> link where the processed drone data (like .ecw files) is stored. Ensure the link access is set to allow reading so the dashboard can access the file directly.
+          Provide the <strong>Google Drive</strong> link where the raw raster file is stored. The backend will asynchronously download it, reproject via GDAL, and generate XYZ map tiles.
         </Typography>
 
         <TextField
           fullWidth
           variant="outlined"
           placeholder="e.g. https://drive.google.com/file/d/..."
-          value={dataLink}
-          onChange={(e) => setDataLink(e.target.value)}
+          value={rasterLink}
+          onChange={(e) => setRasterLink(e.target.value)}
           sx={{ mb: 2, bgcolor: '#FFFFFF' }}
         />
       </Paper>
 
       <Divider sx={{ borderColor: '#D1FAE5' }} />
 
-      {/* ── Section: YouTube Video Link ───────────────────────────────────── */}
+      {/* YouTube Video Link */}
       <Paper
         elevation={0}
         sx={{ p: 3, border: '1px solid rgba(245,158,11,0.2)', borderRadius: '14px', bgcolor: 'rgba(245,158,11,0.02)' }}
       >
         <Typography variant="subtitle1" sx={{ fontFamily: 'Outfit', fontWeight: 700, color: '#0F172A', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <YouTubeIcon sx={{ color: '#F59E0B' }} /> YouTube Video Link
+          <YouTubeIcon sx={{ color: '#F59E0B' }} /> YouTube Comparison Videos
         </Typography>
         <Typography variant="body2" sx={{ color: '#64748B', mb: 2.5 }}>
-          Provide the link to the drone survey video hosted on YouTube. This prevents storing large video files on the cloud server.
+          Provide the YouTube video IDs for the before and after drone survey flights to enable Hardware-Locked Video Comparison.
         </Typography>
 
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="e.g. https://www.youtube.com/watch?v=..."
-          value={youtubeLink}
-          onChange={(e) => setYoutubeLink(e.target.value)}
-          sx={{ mb: 2, bgcolor: '#FFFFFF' }}
-        />
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            label="Before Flight YouTube ID"
+            placeholder="e.g. dQw4w9WgXcQ"
+            value={youtubeBefore}
+            onChange={(e) => setYoutubeBefore(e.target.value)}
+            sx={{ mb: 2, bgcolor: '#FFFFFF' }}
+          />
+          <TextField
+            fullWidth
+            variant="outlined"
+            label="After Flight YouTube ID"
+            placeholder="e.g. dQw4w9WgXcQ"
+            value={youtubeAfter}
+            onChange={(e) => setYoutubeAfter(e.target.value)}
+            sx={{ mb: 2, bgcolor: '#FFFFFF' }}
+          />
+        </Box>
       </Paper>
 
       {/* Save Button */}
@@ -98,8 +123,8 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
         variant="contained"
         fullWidth
         size="large"
+        disabled={isProcessing}
         onClick={handleSaveLinks}
-        disabled={!youtubeLink && !dataLink}
         sx={{
           mt: 1, borderRadius: '10px',
           background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
@@ -108,7 +133,7 @@ export const UploadManager: React.FC<UploadManagerProps> = ({ projectId, onUploa
         }}
         startIcon={<SaveIcon />}
       >
-        Save External Links to Project
+        {isProcessing ? 'Processing GDAL / Saving...' : 'Save Data Links & Start Ingestion'}
       </Button>
     </Box>
   );
