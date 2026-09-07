@@ -1,6 +1,6 @@
 // client/src/pages/SplitViewer.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Button, TextField, IconButton, Tooltip, Typography, Paper } from '@mui/material';
+import { Box, Button, TextField, IconButton, Typography, Paper } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
