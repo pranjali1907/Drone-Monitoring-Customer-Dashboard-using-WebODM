@@ -13,12 +13,17 @@ declare global {
   interface Window { YT: any; onYouTubeIframeAPIReady: () => void; }
 }
 
-const SplitViewer: React.FC = () => {
+interface SplitViewerProps {
+  initialBefore?: string;
+  initialAfter?: string;
+}
+
+const SplitViewer: React.FC<SplitViewerProps> = ({ initialBefore, initialAfter }) => {
   const location = useLocation();
   const params   = new URLSearchParams(location.search);
 
-  const [videoIdBefore, setVideoIdBefore] = useState(params.get('before') || '');
-  const [videoIdAfter,  setVideoIdAfter]  = useState(params.get('after')  || '');
+  const [videoIdBefore, setVideoIdBefore] = useState(initialBefore || params.get('before') || '');
+  const [videoIdAfter,  setVideoIdAfter]  = useState(initialAfter  || params.get('after')  || '');
   const [started, setStarted]             = useState(false);
   const [isPlaying, setIsPlaying]         = useState(false);
   const [sliderVal, setSliderVal]         = useState(0);
