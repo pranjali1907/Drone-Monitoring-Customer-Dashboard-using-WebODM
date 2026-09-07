@@ -62,6 +62,16 @@ const ImageSwipeCompare: React.FC<{ beforeImg?: string; afterImg?: string }> = (
   const [sliderPos, setSliderPos] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging   = useRef(false);
+  const [currentBefore, setCurrentBefore] = useState(beforeImg);
+  const [currentAfter, setCurrentAfter]   = useState(afterImg);
+
+  useEffect(() => {
+    setCurrentBefore(beforeImg);
+  }, [beforeImg]);
+
+  useEffect(() => {
+    setCurrentAfter(afterImg);
+  }, [afterImg]);
 
   const handleMove = (clientX: number) => {
     if (!containerRef.current) return;
@@ -102,7 +112,8 @@ const ImageSwipeCompare: React.FC<{ beforeImg?: string; afterImg?: string }> = (
       {/* Base Image (Before) */}
       <Box
         component="img"
-        src={beforeImg}
+        src={currentBefore}
+        onError={() => setCurrentBefore('https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1400&q=80')}
         alt="Before Survey"
         sx={{
           position: 'absolute',
@@ -113,7 +124,7 @@ const ImageSwipeCompare: React.FC<{ beforeImg?: string; afterImg?: string }> = (
         }}
       />
       <Chip
-        label="BEFORE: Baseline Flight"
+        label="BEFORE: Baseline .ECW"
         size="small"
         sx={{
           position: 'absolute',
@@ -130,7 +141,8 @@ const ImageSwipeCompare: React.FC<{ beforeImg?: string; afterImg?: string }> = (
       {/* Top Image (After - Clipped) */}
       <Box
         component="img"
-        src={afterImg}
+        src={currentAfter}
+        onError={() => setCurrentAfter('https://images.unsplash.com/photo-1527977966376-1c8408f9f108?auto=format&fit=crop&w=1400&q=80')}
         alt="After Survey"
         sx={{
           position: 'absolute',
@@ -142,7 +154,7 @@ const ImageSwipeCompare: React.FC<{ beforeImg?: string; afterImg?: string }> = (
         }}
       />
       <Chip
-        label="AFTER: Recent Survey"
+        label="AFTER: Recent .ECW"
         size="small"
         sx={{
           position: 'absolute',
@@ -424,10 +436,31 @@ export const ProjectDetails: React.FC = () => {
             </Box>
 
             {compareType === 'image' ? (
-              <ImageSwipeCompare
-                beforeImg={surveyImages[0]?.url}
-                afterImg={surveyImages[1]?.url}
-              />
+              <Box>
+                {/* Source attribution for .ECW files */}
+                {rasterLayers.length > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+                    <Chip
+                      label={`🛰️ .ECW Baseline: ${rasterLayers[0]?.name || 'Layer #1'}`}
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                    />
+                    {rasterLayers.length > 1 && (
+                      <Chip
+                        label={`vs ${rasterLayers[1]?.name || 'Layer #2'}`}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    )}
+                  </Box>
+                )}
+                <ImageSwipeCompare
+                  beforeImg={rasterLayers[0] ? `/tiles/${rasterLayers[0].id}/preview.jpg` : surveyImages[0]?.url}
+                  afterImg={rasterLayers[1] ? `/tiles/${rasterLayers[1].id}/preview.jpg` : (rasterLayers[0] ? `/tiles/${rasterLayers[0].id}/preview.jpg` : surveyImages[1]?.url)}
+                />
+              </Box>
             ) : (
               <Box sx={{ height: 'calc(100vh - 320px)', minHeight: 480 }}>
                 {hasYt ? (

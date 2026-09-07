@@ -1,4 +1,7 @@
 import datetime
+import os
+import json
+import subprocess
 from typing import List, Optional
 import requests as http_requests
 
@@ -238,6 +241,67 @@ def proxy_drive(file_id: str = Query(...)):
                 yield chunk
 
     return StreamingResponse(chunk_generator(), media_type=content_type)
+
+
+# ── Auto-Detect GPS Coordinates from .ECW / Raster ─────────────────────────
+@router.post("/detect-coordinates")
+def detect_coordinates(
+    drive_url: str = Query(...),
+    _user: User = Depends(auth.get_current_user),
+):
+    """
+    Inspect a Google Drive .ecw or .tif raster file header and extract exact GPS centroid and extent.
+    """
+    file_id = extract_drive_file_id(drive_url)
+    if not file_id:
+        raise HTTPException(status_code=400, detail="Invalid Google Drive URL")
+
+    dest = f"/tmp/detect_{file_id}"
+    try:
+        session = http_requests.Session()
+        download_url = "https://docs.google.com/uc?export=download"
+        resp = session.get(download_url, params={"id": file_id}, stream=True, timeout=30)
+        confirm = None
+        for k, v in resp.cookies.items():
+            if k.startswith("download_warning"):
+                confirm = v
+                break
+        if confirm:
+            resp = session.get(download_url, params={"id": file_id, "confirm": confirm}, stream=True, timeout=30)
+
+        with open(dest, "wb") as f:
+            bytes_written = 0
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+                    bytes_written += len(chunk)
+                    if bytes_written >= 40 * 1024 * 1024:
+                        break
+
+        info_res = subprocess.run(["gdalinfo", "-json", dest], capture_output=True, text=True, timeout=30)
+        if info_res.returncode == 0:
+            meta = json.loads(info_res.stdout)
+            wgs84 = meta.get("wgs84Extent", {})
+            coords = wgs84.get("coordinates", [[]])[0]
+            if coords and len(coords) >= 4:
+                avg_lon = sum(c[0] for c in coords) / len(coords)
+                avg_lat = sum(c[1] for c in coords) / len(coords)
+                return {
+                    "latitude": round(avg_lat, 6),
+                    "longitude": round(avg_lon, 6),
+                    "boundary": wgs84
+                }
+        raise HTTPException(status_code=422, detail="Raster header could not be fully parsed in preview. Coordinates will auto-extract during background processing.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to inspect raster: {str(e)}")
+    finally:
+        if os.path.exists(dest):
+            try:
+                os.remove(dest)
+            except Exception:
+                pass
 
 
 # ── Measurements ──────────────────────────────────────────────────────────

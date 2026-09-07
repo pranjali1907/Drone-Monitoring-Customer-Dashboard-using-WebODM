@@ -12,6 +12,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import MapIcon from '@mui/icons-material/Map';
+import GpsFixedIcon from '@mui/icons-material/GpsFixed';
 
 const markerIcon = new L.Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -47,9 +48,38 @@ export const CreateProject: React.FC = () => {
   const [ytBefore, setYtBefore]     = useState('');
   const [ytAfter, setYtAfter]       = useState('');
 
+  // Auto-detection state
+  const [detectingGps, setDetectingGps] = useState(false);
+  const [gpsSource, setGpsSource]       = useState<'manual' | 'detected'>('manual');
+
   const handleMapPick = (pickedLat: number, pickedLng: number) => {
     setLat(parseFloat(pickedLat.toFixed(6)));
     setLng(parseFloat(pickedLng.toFixed(6)));
+    setGpsSource('manual');
+  };
+
+  const handleAutoDetectGps = async () => {
+    if (!rasterUrl.trim()) {
+      setError('Please enter a Google Drive Raster (.ECW / .TIF) URL in the right column first.');
+      return;
+    }
+    setDetectingGps(true);
+    setError('');
+    try {
+      const res = await axios.post(`/api/projects/detect-coordinates?drive_url=${encodeURIComponent(rasterUrl.trim())}`);
+      if (res.data?.latitude && res.data?.longitude) {
+        setLat(res.data.latitude);
+        setLng(res.data.longitude);
+        setGpsSource('detected');
+      }
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.detail ||
+        'Could not auto-detect from header preview. Coordinates will be automatically extracted during full background GDAL ingestion.'
+      );
+    } finally {
+      setDetectingGps(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -154,20 +184,36 @@ export const CreateProject: React.FC = () => {
 
           {/* GPS Coordinates */}
           <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid #E2E8F0', mb: 3 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-              GPS Coordinates
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                GPS Coordinates
+              </Typography>
+              {gpsSource === 'detected' ? (
+                <Chip label="Auto-detected from .ECW file" color="success" size="small" />
+              ) : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={detectingGps || !rasterUrl.trim()}
+                  onClick={handleAutoDetectGps}
+                  startIcon={detectingGps ? <CircularProgress size={14} /> : <GpsFixedIcon fontSize="small" />}
+                  sx={{ borderColor: '#10B981', color: '#10B981', textTransform: 'none', fontSize: '0.78rem' }}
+                >
+                  {detectingGps ? 'Reading .ECW...' : 'Auto-Fetch from .ECW'}
+                </Button>
+              )}
+            </Box>
             <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-              Click anywhere on the map (right column) to auto-fill coordinates, or enter manually.
+              Coordinates are automatically fetched from your georeferenced .ECW file in Google Drive, or you can click on the map.
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={6}>
                 <TextField fullWidth label="Latitude" type="number" value={lat}
-                  onChange={e => setLat(parseFloat(e.target.value))} />
+                  onChange={e => { setLat(parseFloat(e.target.value)); setGpsSource('manual'); }} />
               </Grid>
               <Grid item xs={6}>
                 <TextField fullWidth label="Longitude" type="number" value={lng}
-                  onChange={e => setLng(parseFloat(e.target.value))} />
+                  onChange={e => { setLng(parseFloat(e.target.value)); setGpsSource('manual'); }} />
               </Grid>
             </Grid>
           </Paper>
