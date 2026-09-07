@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, ImageOverlay, Polygon, Polyline, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, ImageOverlay, Polygon, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Box, Button, Typography, Slider, Paper, ToggleButtonGroup, ToggleButton, Divider } from '@mui/material';
 import axios from 'axios';
@@ -42,6 +42,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const [points, setPoints] = useState<L.LatLng[]>([]);
   const [measureValue, setMeasureValue] = useState<string>('');
   const [savedMeasurements, setSavedMeasurements] = useState<any[]>([]);
+  const [layers, setLayers] = useState<any[]>([]);
 
   const center: [number, number] = [latitude, longitude];
 
@@ -66,8 +67,20 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
+  const fetchLayers = async () => {
+    try {
+      const res = await axios.get(`/api/projects/${projectId}/layers`);
+      setLayers(res.data);
+    } catch (err) {
+      console.error('Failed to fetch layers:', err);
+    }
+  };
+
   useEffect(() => {
     fetchMeasurements();
+    fetchLayers();
+    const interval = setInterval(fetchLayers, 5000);
+    return () => clearInterval(interval);
   }, [projectId]);
 
   // Leaflet map click listener component
@@ -98,6 +111,16 @@ export const MapView: React.FC<MapViewProps> = ({
         }
       },
     });
+    return null;
+  };
+
+  const FitBounds = ({ bounds }: { bounds: L.LatLngBoundsExpression }) => {
+    const map = useMap();
+    useEffect(() => {
+      if (bounds) {
+        map.fitBounds(bounds, { animate: false });
+      }
+    }, [map, bounds]);
     return null;
   };
 
@@ -219,6 +242,7 @@ export const MapView: React.FC<MapViewProps> = ({
         style={{ width: '100%', height: '100%' }}
       >
         <MapEvents />
+        <FitBounds bounds={boundaryCoords.length > 0 ? boundaryCoords : imageBounds} />
 
         {mapType === 'streets' ? (
           <TileLayer
@@ -243,7 +267,7 @@ export const MapView: React.FC<MapViewProps> = ({
           />
         )}
 
-        {/* Orthophoto Image Overlay */}
+        {/* Orthophoto Image Overlay (Legacy) */}
         {hasOrthophoto && (
           <ImageOverlay
             url={orthophotoUrl}
@@ -251,6 +275,16 @@ export const MapView: React.FC<MapViewProps> = ({
             opacity={opacity}
           />
         )}
+
+        {/* Dynamic GDAL Raster Tiles */}
+        {layers.filter(l => l.layer_type === 'RASTER_TILES' && l.status === 'READY').map(layer => (
+          <TileLayer
+            key={layer.id}
+            url={`${API_URL}/static/projects/${projectId}/tiles/{z}/{x}/{y}.png`}
+            tms={true}
+            opacity={opacity}
+          />
+        ))}
 
         {/* Center coordinates marker */}
         <Marker position={center} icon={markerIcon}>

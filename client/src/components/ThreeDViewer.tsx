@@ -104,6 +104,34 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, onGeometr
 
       await Promise.all(loadPromises);
 
+      // Precision Jitter Fix: Subtract centroid of primary PLY from all geometries
+      if (loaded.length > 0) {
+        // Find primary bounding box (from first loaded PLY)
+        const primaryGeo = loaded[0].geometry;
+        primaryGeo.computeBoundingBox();
+        const primaryBox = primaryGeo.boundingBox;
+        
+        if (primaryBox) {
+          const center = new THREE.Vector3();
+          primaryBox.getCenter(center);
+          
+          loaded.forEach(ply => {
+            const posAttr = ply.geometry.getAttribute('position');
+            if (posAttr) {
+              const arr = posAttr.array;
+              for (let i = 0; i < arr.length; i += 3) {
+                arr[i] -= center.x;
+                arr[i+1] -= center.y;
+                arr[i+2] -= center.z;
+              }
+              posAttr.needsUpdate = true;
+            }
+            ply.geometry.computeBoundingBox();
+            ply.geometry.computeBoundingSphere();
+          });
+        }
+      }
+
       if (!isCancelled) {
         // Expose geometry to parent for volume calculation (using the first one or combined)
         if (loaded.length > 0 && onGeometryLoaded) {

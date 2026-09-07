@@ -224,3 +224,60 @@ def proxy_google_drive(file_id: str):
         media_type=response.headers.get("content-type", "application/octet-stream")
     )
 
+from fastapi import BackgroundTasks
+from server.services.drive_loader import extract_drive_id, download_file_from_google_drive
+from server.services.raster_worker import process_raster_background
+
+@router.post("/{project_id}/ingest-raster")
+def ingest_raster(project_id: int, url: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    file_id = extract_drive_id(url)
+    if not file_id:
+        raise HTTPException(status_code=400, detail="Invalid Google Drive URL")
+
+    # Create Layer DB record
+    layer = models.ProjectLayer(
+        project_id=project_id,
+        layer_type="RASTER_TILES",
+        file_path_or_url=url,
+        label="Drive Raster Layer",
+        status="PENDING"
+    )
+    db.add(layer)
+    db.commit()
+    db.refresh(layer)
+
+    # Ingest task
+    def ingest_task(layer_id, fid, pid):
+        import os
+        from server.database import SessionLocal
+        dl_dir = f"/app/server/static/projects/{pid}"
+        os.makedirs(dl_dir, exist_ok=True)
+        dest = f"{dl_dir}/raw_{layer_id}.tif"
+        try:
+            download_file_from_google_drive(fid, dest)
+            process_raster_background(layer_id, dest, pid)
+        except Exception as e:
+            db_task = SessionLocal()
+            lyr = db_task.query(models.ProjectLayer).filter(models.ProjectLayer.id == layer_id).first()
+            if lyr:
+                lyr.status = "FAILED"
+                db_task.commit()
+            db_task.close()
+
+    background_tasks.add_task(ingest_task, layer.id, file_id, project_id)
+    return {"message": "Ingestion started", "layer_id": layer.id}
+
+@router.get("/{project_id}/layers")
+def get_project_layers(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    layers = db.query(models.ProjectLayer).filter(models.ProjectLayer.project_id == project_id).all()
+    return layers
+
+

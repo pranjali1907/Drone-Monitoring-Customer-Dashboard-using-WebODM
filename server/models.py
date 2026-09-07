@@ -52,6 +52,8 @@ class Project(Base):
     survey_date = Column(Date, nullable=True)
     completion_date = Column(Date, nullable=True)
     status = Column(String(50), default="draft")  # 'draft', 'processing', 'completed', 'failed'
+    youtube_before_id = Column(String(100), nullable=True)
+    youtube_after_id = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
@@ -68,7 +70,22 @@ class Project(Base):
     orthophotos = relationship("Orthophoto", back_populates="project", cascade="all, delete-orphan")
     reports = relationship("Report", back_populates="project", cascade="all, delete-orphan")
     processing_jobs = relationship("ProcessingJob", back_populates="project", cascade="all, delete-orphan")
+    layers = relationship("ProjectLayer", back_populates="project", cascade="all, delete-orphan")
     measurements = relationship("Measurement", back_populates="project", cascade="all, delete-orphan")
+
+class ProjectLayer(Base):
+    __tablename__ = "project_layers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
+    layer_type = Column(String(50), nullable=False) # 'RASTER_TILES', 'POINT_CLOUD_PLY'
+    file_path_or_url = Column(Text, nullable=False)
+    label = Column(String(255), nullable=True)
+    status = Column(String(50), default="READY") # 'PENDING', 'PROCESSING', 'READY', 'FAILED'
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    
+    # Relationships
+    project = relationship("Project", back_populates="layers")
 
 class DroneImage(Base):
     __tablename__ = "drone_images"
