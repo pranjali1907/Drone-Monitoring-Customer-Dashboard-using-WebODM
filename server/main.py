@@ -18,6 +18,26 @@ from server.seed_demo import seed_admin
 # ── Create all DB tables ──────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
 
+# ── Auto schema migration for existing databases ──────────────────────────
+try:
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE project_layers ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;"))
+        conn.execute(text("ALTER TABLE project_layers ADD COLUMN IF NOT EXISTS crs VARCHAR(100);"))
+        conn.execute(text("ALTER TABLE project_layers ADD COLUMN IF NOT EXISTS resolution_cm DOUBLE PRECISION;"))
+        conn.execute(text("ALTER TABLE project_layers ADD COLUMN IF NOT EXISTS metadata_json TEXT;"))
+        conn.execute(text("ALTER TABLE drone_images ADD COLUMN IF NOT EXISTS drive_file_id VARCHAR(255);"))
+        conn.execute(text("ALTER TABLE drone_images ADD COLUMN IF NOT EXISTS drive_url TEXT;"))
+        conn.execute(text("ALTER TABLE drone_images ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;"))
+        conn.execute(text("ALTER TABLE drone_images ADD COLUMN IF NOT EXISTS altitude_m DOUBLE PRECISION;"))
+        conn.execute(text("ALTER TABLE drone_images ADD COLUMN IF NOT EXISTS heading_deg DOUBLE PRECISION;"))
+        conn.execute(text("ALTER TABLE drone_images ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ;"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS boundary_wkt TEXT;"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS youtube_before_id VARCHAR(100);"))
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS youtube_after_id VARCHAR(100);"))
+except Exception as _m_err:
+    print(f"[WARN] Schema migration notice: {_m_err}")
+
 # ── FastAPI app ───────────────────────────────────────────────────────────
 app = FastAPI(
     title=settings.PROJECT_NAME,
