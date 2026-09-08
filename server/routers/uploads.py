@@ -154,23 +154,30 @@ def upload_point_cloud(
 
     static_path = f"static/processed/project_{project_id}/{raw_filename}"
 
-    orthophoto = (
-        db.query(models.Orthophoto)
-        .filter(models.Orthophoto.project_id == project_id)
+    layer = (
+        db.query(models.ProjectLayer)
+        .filter(
+            models.ProjectLayer.project_id == project_id,
+            models.ProjectLayer.layer_type == "POINT_CLOUD_PLY"
+        )
         .first()
     )
-    if orthophoto:
-        orthophoto.point_cloud_path = f"static/processed/project_{project_id}/point_cloud.ply"
+    if layer:
+        layer.name = raw_filename
+        layer.tile_url_pattern = static_path
+        layer.status = "READY"
     else:
-        orthophoto = models.Orthophoto(
+        layer = models.ProjectLayer(
             project_id=project_id,
-            point_cloud_path=f"static/processed/project_{project_id}/point_cloud.ply",
+            name=raw_filename,
+            layer_type="POINT_CLOUD_PLY",
+            tile_url_pattern=static_path,
+            status="READY",
         )
-        db.add(orthophoto)
+        db.add(layer)
 
-    project.status = "completed"
     db.commit()
-    db.refresh(orthophoto)
+    db.refresh(layer)
 
     return {
         "message": f"Point cloud '{raw_filename}' uploaded successfully",
@@ -211,11 +218,16 @@ def delete_point_cloud(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    orthophoto = (
-        db.query(models.Orthophoto)
-        .filter(models.Orthophoto.project_id == project_id)
-        .first()
+    layers = (
+        db.query(models.ProjectLayer)
+        .filter(
+            models.ProjectLayer.project_id == project_id,
+            models.ProjectLayer.layer_type == "POINT_CLOUD_PLY"
+        )
+        .all()
     )
+    for l in layers:
+        db.delete(l)
 
     ply_path = os.path.join(settings.PROCESSED_DIR, f"project_{project_id}", "point_cloud.ply")
     try:
@@ -224,17 +236,7 @@ def delete_point_cloud(
     except OSError as exc:
         print(f"[WARN] Could not remove ply file: {exc}")
 
-    if orthophoto:
-        orthophoto.point_cloud_path = None
-        has_other_outputs = any([
-            orthophoto.orthophoto_path,
-            orthophoto.dsm_path,
-            orthophoto.model_3d_path,
-        ])
-        if not has_other_outputs:
-            project.status = "draft"
-        db.commit()
-
+    db.commit()
     return {"message": "Point cloud deleted successfully"}
 
 @router.delete("/project/{project_id}/ply/{filename}")
