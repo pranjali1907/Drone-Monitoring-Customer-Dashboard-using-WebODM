@@ -318,7 +318,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ projectId, pointClou
     <Box sx={{ position: 'relative', width: '100%', height: 'calc(100vh - 280px)', minHeight: 480, overflow: 'hidden', borderRadius: 3, border: '1px solid #A7F3D0', bgcolor: '#F8FFF9' }}>
       {/* Loading overlay */}
       {/* Loading overlay */}
-      {serverLoading && (
+      {loadingPly && (
         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(15,26,20,0.85)', zIndex: 20, borderRadius: 3 }}>
           <Typography sx={{ color: '#10B981', fontFamily: 'Outfit', fontWeight: 700, fontSize: '1rem' }}>
             ⟳ Loading point cloud from server…

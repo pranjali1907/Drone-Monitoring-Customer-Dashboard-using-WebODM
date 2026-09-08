@@ -56,6 +56,9 @@ interface MapViewProps {
   latitude: number;
   longitude: number;
   boundaryWkt?: string;
+  boundaryGeoJson?: string;
+  hasOrthophoto?: boolean;
+  orthophotoPath?: string;
 }
 
 // Fit map to bounds when boundary is available
